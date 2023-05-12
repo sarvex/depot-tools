@@ -52,14 +52,13 @@ class Rietveld(object):
             self.url,
             get_creds,
             extra_headers=extra_headers or {})
+    elif email == '':
+      # If email is given as an empty string, then assume we want to make
+      # requests that do not need authentication.  Bypass authentication by
+      # setting the auth_function to None.
+      self.rpc_server = upload.HttpRpcServer(url, None)
     else:
-      if email == '':
-        # If email is given as an empty string, then assume we want to make
-        # requests that do not need authentication.  Bypass authentication by
-        # setting the auth_function to None.
-        self.rpc_server = upload.HttpRpcServer(url, None)
-      else:
-        self.rpc_server = upload.GetRpcServer(url, email)
+      self.rpc_server = upload.GetRpcServer(url, email)
 
     self._xsrf_token = None
     self._xsrf_token_time = None
@@ -217,27 +216,26 @@ class Rietveld(object):
       match = re.match(r'^(\w+): (.+)$', action)
       if not match or not rietveld_svn_props:
         raise patch.UnsupportedPatchFormat(
-            filename,
-            'Failed to parse svn properties: %s, %s' % (action, svn_props))
+            filename, f'Failed to parse svn properties: {action}, {svn_props}')
 
-      if match.group(2) == 'svn:mergeinfo':
+      if match[2] == 'svn:mergeinfo':
         # Silently ignore the content.
         rietveld_svn_props.pop(0)
         continue
 
-      if match.group(1) not in ('Added', 'Modified'):
+      if match[1] not in ('Added', 'Modified'):
         # Will fail for our French friends.
         raise patch.UnsupportedPatchFormat(
             filename, 'Unsupported svn property operation.')
 
-      if match.group(2) in ('svn:eol-style', 'svn:executable', 'svn:mime-type'):
+      if match[2] in ('svn:eol-style', 'svn:executable', 'svn:mime-type'):
         # '   + foo' where foo is the new value. That's fragile.
         content = rietveld_svn_props.pop(0)
-        match2 = re.match(r'^   \+ (.*)$', content)
-        if not match2:
+        if match2 := re.match(r'^   \+ (.*)$', content):
+          svn_props.append((match[2], match2[1]))
+        else:
           raise patch.UnsupportedPatchFormat(
               filename, 'Unsupported svn property format.')
-        svn_props.append((match.group(2), match2.group(1)))
     return svn_props
 
   def update_description(self, issue, description):
@@ -249,8 +247,8 @@ class Rietveld(object):
 
   def add_comment(self, issue, message, add_as_reviewer=False):
     max_message = 10000
-    tail = '…\n(message too large)'
     if len(message) > max_message:
+      tail = '…\n(message too large)'
       message = message[:max_message-len(tail)] + tail
     logging.info('issue %d; comment: %s' % (issue, message.strip()[:300]))
     return self.post('/%d/publish' % issue, [
@@ -309,9 +307,8 @@ class Rietveld(object):
     url = '/search?format=json'
     # Sort the keys mainly to ease testing.
     for key in sorted(string_keys):
-      value = string_keys[key]
-      if value:
-        url += '&%s=%s' % (key, urllib2.quote(value))
+      if value := string_keys[key]:
+        url += f'&{key}={urllib2.quote(value)}'
     for key in sorted(three_state_keys):
       value = three_state_keys[key]
       if value is not None:
@@ -333,9 +330,8 @@ class Rietveld(object):
       data = json.loads(output) or {}
       if not data.get('results'):
         break
-      for i in data['results']:
-        yield i
-      cursor = '&cursor=%s' % data['cursor']
+      yield from data['results']
+      cursor = f"&cursor={data['cursor']}"
 
   def trigger_try_jobs(
       self, issue, patchset, reason, clobber, revision, builders_and_tests,
@@ -383,7 +379,7 @@ class Rietveld(object):
     Returns a tuple of the list of try jobs and the cursor for the next request.
     """
     url = '/get_pending_try_patchsets?limit=%d' % limit
-    extra = ('&cursor=' + cursor) if cursor else ''
+    extra = f'&cursor={cursor}' if cursor else ''
     data = json.loads(self.get(url + extra))
     return data['jobs'], data['cursor']
 
@@ -474,9 +470,9 @@ class OAuthRpcServer(object):
       self.host = host
     elif host_parts.scheme == 'http':
       upload.logging.warning('Changing protocol to https')
-      self.host = 'https' + host[4:]
+      self.host = f'https{host[4:]}'
     else:
-      msg = 'Invalid url provided: %s' % host
+      msg = f'Invalid url provided: {host}'
       upload.logging.error(msg)
       raise ValueError(msg)
 
@@ -531,7 +527,7 @@ class OAuthRpcServer(object):
       # TODO(pgervais) implement some kind of retry mechanism (see upload.py).
       url = self.host + request_path
       if kwargs:
-        url += "?" + urllib.urlencode(kwargs)
+        url += f"?{urllib.urlencode(kwargs)}"
 
       # This weird loop is there to detect when the OAuth2 token has expired.
       # This is specific to appengine *and* rietveld. It relies on the
@@ -587,11 +583,11 @@ class JwtOAuth2Rietveld(Rietveld):
       private_key_password = 'notasecret'
 
     self.url = url.rstrip('/')
-    bot_url = self.url + '/bots'
+    bot_url = f'{self.url}/bots'
 
     with open(client_private_key_file, 'rb') as f:
       client_private_key = f.read()
-    logging.info('Using OAuth login: %s' % client_email)
+    logging.info(f'Using OAuth login: {client_email}')
     self.rpc_server = OAuthRpcServer(bot_url,
                                      client_email,
                                      client_private_key,

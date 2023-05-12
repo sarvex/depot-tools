@@ -92,21 +92,15 @@ class Stats(object):
 
   @property
   def percent_done(self):
-    if not self.total:
-      return 0
-    return self.actually_reviewed * 100. / self.total
+    return 0 if not self.total else self.actually_reviewed * 100. / self.total
 
   @property
   def review_per_day(self):
-    if not self.days:
-      return 0
-    return self.total * 1. / self.days
+    return 0 if not self.days else self.total * 1. / self.days
 
   @property
   def review_done_per_day(self):
-    if not self.days:
-      return 0
-    return self.actually_reviewed * 1. / self.days
+    return 0 if not self.days else self.actually_reviewed * 1. / self.days
 
   def finalize(self, first_day, last_day):
     if self.actually_reviewed:
@@ -178,9 +172,9 @@ def _process_issue_latency(issue, reviewer, stats):
 def _process_issue(issue):
   """Preprocesses the issue to simplify the remaining code."""
   issue['owner_email'] = username(issue['owner_email'])
-  issue['reviewers'] = set(username(r) for r in issue['reviewers'])
+  issue['reviewers'] = {username(r) for r in issue['reviewers']}
   # By default, hide commit-bot.
-  issue['reviewers'] -= set(['commit-bot'])
+  issue['reviewers'] -= {'commit-bot'}
   for msg in issue['messages']:
     msg['sender'] = username(msg['sender'])
     msg['recipients'] = [username(r) for r in msg['recipients']]

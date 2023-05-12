@@ -64,14 +64,12 @@ class ACL:
     def __repr__(self):
         # Owner is optional in GS ACLs.
         if hasattr(self, 'owner'):
-            entries_repr = ['Owner:%s' % self.owner.__repr__()]
+            entries_repr = [f'Owner:{self.owner.__repr__()}']
         else:
             entries_repr = ['']
-        acl_entries = self.entries
-        if acl_entries:
-            for e in acl_entries.entry_list:
-                entries_repr.append(e.__repr__())
-        return '<%s>' % ', '.join(entries_repr)
+        if acl_entries := self.entries:
+            entries_repr.extend(e.__repr__() for e in acl_entries.entry_list)
+        return f"<{', '.join(entries_repr)}>"
 
     # Method with same signature as boto.s3.acl.ACL.add_email_grant(), to allow
     # polymorphic treatment at application layer.
@@ -108,20 +106,17 @@ class ACL:
     def endElement(self, name, value, connection):
         if name.lower() == OWNER.lower():
             pass
-        elif name.lower() == ENTRIES.lower():
-            pass
-        else:
+        elif name.lower() != ENTRIES.lower():
             setattr(self, name, value)
 
     def to_xml(self):
-        s = '<%s>' % ACCESS_CONTROL_LIST
+        s = f'<{ACCESS_CONTROL_LIST}>'
         # Owner is optional in GS ACLs.
         if hasattr(self, 'owner'):
             s += self.owner.to_xml()
-        acl_entries = self.entries
-        if acl_entries:
+        if acl_entries := self.entries:
             s += acl_entries.to_xml()
-        s += '</%s>' % ACCESS_CONTROL_LIST
+        s += f'</{ACCESS_CONTROL_LIST}>'
         return s
 
 
@@ -134,30 +129,25 @@ class Entries:
         self.entry_list = []
 
     def __repr__(self):
-        entries_repr = []
-        for e in self.entry_list:
-            entries_repr.append(e.__repr__())
-        return '<Entries: %s>' % ', '.join(entries_repr)
+        entries_repr = [e.__repr__() for e in self.entry_list]
+        return f"<Entries: {', '.join(entries_repr)}>"
 
     def startElement(self, name, attrs, connection):
-        if name.lower() == ENTRY.lower():
-            entry = Entry(self)
-            self.entry_list.append(entry)
-            return entry
-        else:
+        if name.lower() != ENTRY.lower():
             return None
+        entry = Entry(self)
+        self.entry_list.append(entry)
+        return entry
 
     def endElement(self, name, value, connection):
-        if name.lower() == ENTRY.lower():
-            pass
-        else:
+        if name.lower() != ENTRY.lower():
             setattr(self, name, value)
 
     def to_xml(self):
-        s = '<%s>' % ENTRIES
+        s = f'<{ENTRIES}>'
         for entry in self.entry_list:
             s += entry.to_xml()
-        s += '</%s>' % ENTRIES
+        s += f'</{ENTRIES}>'
         return s
         
 
@@ -172,7 +162,7 @@ class Entry:
         self.permission = permission
 
     def __repr__(self):
-        return '<%s: %s>' % (self.scope.__repr__(), self.permission.__repr__())
+        return f'<{self.scope.__repr__()}: {self.permission.__repr__()}>'
 
     def startElement(self, name, attrs, connection):
         if name.lower() == SCOPE.lower():
@@ -192,13 +182,10 @@ class Entry:
             # xmlplus-based parsers, until this more specific problem was 
             # determined.
             if TYPE not in attrs:
-                raise InvalidAclError('Missing "%s" in "%s" part of ACL' %
-                                      (TYPE, SCOPE))
+                raise InvalidAclError(f'Missing "{TYPE}" in "{SCOPE}" part of ACL')
             self.scope = Scope(self, attrs[TYPE])
             return self.scope
-        elif name.lower() == PERMISSION.lower():
-            pass
-        else:
+        elif name.lower() != PERMISSION.lower():
             return None
 
     def endElement(self, name, value, connection):
@@ -206,17 +193,17 @@ class Entry:
             pass
         elif name.lower() == PERMISSION.lower():
             value = value.strip()
-            if not value in SupportedPermissions:
-                raise InvalidAclError('Invalid Permission "%s"' % value)
+            if value not in SupportedPermissions:
+                raise InvalidAclError(f'Invalid Permission "{value}"')
             self.permission = value
         else:
             setattr(self, name, value)
 
     def to_xml(self):
-        s = '<%s>' % ENTRY
+        s = f'<{ENTRY}>'
         s += self.scope.to_xml()
-        s += '<%s>%s</%s>' % (PERMISSION, self.permission, PERMISSION)
-        s += '</%s>' % ENTRY
+        s += f'<{PERMISSION}>{self.permission}</{PERMISSION}>'
+        s += f'</{ENTRY}>'
         return s
 
 class Scope:
@@ -243,8 +230,7 @@ class Scope:
         self.domain = domain
         self.email_address = email_address
         if self.type.lower() not in self.ALLOWED_SCOPE_TYPE_SUB_ELEMS:
-            raise InvalidAclError('Invalid %s %s "%s" ' %
-                                  (SCOPE, TYPE, self.type))
+            raise InvalidAclError(f'Invalid {SCOPE} {TYPE} "{self.type}" ')
 
     def __repr__(self):
         named_entity = None
@@ -254,16 +240,16 @@ class Scope:
             named_entity = self.email_address
         elif self.domain:
             named_entity = self.domain
-        if named_entity:
-            return '<%s: %s>' % (self.type, named_entity)
-        else:
-            return '<%s>' % self.type
+        return f'<{self.type}: {named_entity}>' if named_entity else f'<{self.type}>'
 
     def startElement(self, name, attrs, connection):
-        if (not name.lower() in
-            self.ALLOWED_SCOPE_TYPE_SUB_ELEMS[self.type.lower()]):
-            raise InvalidAclError('Element "%s" not allowed in %s %s "%s" ' %
-                                   (name, SCOPE, TYPE, self.type))
+        if (
+            name.lower()
+            not in self.ALLOWED_SCOPE_TYPE_SUB_ELEMS[self.type.lower()]
+        ):
+            raise InvalidAclError(
+                f'Element "{name}" not allowed in {SCOPE} {TYPE} "{self.type}" '
+            )
         return None
 
     def endElement(self, name, value, connection):
@@ -280,25 +266,24 @@ class Scope:
             setattr(self, name, value)
 
     def to_xml(self):
-        s = '<%s type="%s">' % (SCOPE, self.type)
-        if (self.type.lower() == ALL_AUTHENTICATED_USERS.lower()
-            or self.type.lower() == ALL_USERS.lower()):
+        s = f'<{SCOPE} type="{self.type}">'
+        if self.type.lower() in [
+            ALL_AUTHENTICATED_USERS.lower(),
+            ALL_USERS.lower(),
+        ]:
             pass
         elif self.type.lower() == GROUP_BY_DOMAIN.lower():
-            s += '<%s>%s</%s>' % (DOMAIN, self.domain, DOMAIN)
-        elif (self.type.lower() == GROUP_BY_EMAIL.lower()
-              or self.type.lower() == USER_BY_EMAIL.lower()):
-            s += '<%s>%s</%s>' % (EMAIL_ADDRESS, self.email_address,
-                                  EMAIL_ADDRESS)
+            s += f'<{DOMAIN}>{self.domain}</{DOMAIN}>'
+        elif self.type.lower() in [GROUP_BY_EMAIL.lower(), USER_BY_EMAIL.lower()]:
+            s += f'<{EMAIL_ADDRESS}>{self.email_address}</{EMAIL_ADDRESS}>'
             if self.name:
-              s += '<%s>%s</%s>' % (NAME, self.name, NAME)
-        elif (self.type.lower() == GROUP_BY_ID.lower()
-              or self.type.lower() == USER_BY_ID.lower()):
-            s += '<%s>%s</%s>' % (ID, self.id, ID)
+                s += f'<{NAME}>{self.name}</{NAME}>'
+        elif self.type.lower() in [GROUP_BY_ID.lower(), USER_BY_ID.lower()]:
+            s += f'<{ID}>{self.id}</{ID}>'
             if self.name:
-              s += '<%s>%s</%s>' % (NAME, self.name, NAME)
+                s += f'<{NAME}>{self.name}</{NAME}>'
         else:
             raise InvalidAclError('Invalid scope type "%s" ', self.type)
 
-        s += '</%s>' % SCOPE
+        s += f'</{SCOPE}>'
         return s

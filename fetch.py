@@ -105,14 +105,15 @@ class GclientGitCheckout(GclientCheckout, GitCheckout):
   def _format_spec(self):
     def _format_literal(lit):
       if isinstance(lit, basestring):
-        return '"%s"' % lit
+        return f'"{lit}"'
       if isinstance(lit, list):
-        return '[%s]' % ', '.join(_format_literal(i) for i in lit)
+        return f"[{', '.join(_format_literal(i) for i in lit)}]"
       return '%r' % lit
+
     soln_strings = []
     for soln in self.spec['solutions']:
-      soln_string= '\n'.join('    "%s": %s,' % (key, _format_literal(value))
-                             for key, value in soln.iteritems())
+      soln_string = '\n'.join(f'    "{key}": {_format_literal(value)},'
+                              for key, value in soln.iteritems())
       soln_strings.append('  {\n%s\n  },' % soln_string)
     gclient_spec = 'solutions = [\n%s\n]\n' % '\n'.join(soln_strings)
     extra_keys = ['target_os', 'target_os_only']
@@ -201,10 +202,10 @@ CHECKOUT_TYPE_MAP = {
 
 def CheckoutFactory(type_name, options, spec, root):
   """Factory to build Checkout class instances."""
-  class_ = CHECKOUT_TYPE_MAP.get(type_name)
-  if not class_:
-    raise KeyError('unrecognized checkout type: %s' % type_name)
-  return class_(options, spec, root)
+  if class_ := CHECKOUT_TYPE_MAP.get(type_name):
+    return class_(options, spec, root)
+  else:
+    raise KeyError(f'unrecognized checkout type: {type_name}')
 
 
 #################################################
@@ -258,14 +259,14 @@ def handle_args(argv):
     elif arg == '--no-history':
       no_history = True
     else:
-      usage('Invalid option %s.' % arg)
+      usage(f'Invalid option {arg}.')
 
   def looks_like_arg(arg):
     return arg.startswith('--') and arg.count('=') == 1
 
   bad_parms = [x for x in argv[2:] if not looks_like_arg(x)]
   if bad_parms:
-    usage('Got bad arguments %s' % bad_parms)
+    usage(f'Got bad arguments {bad_parms}')
 
   recipe = argv[1]
   props = argv[2:]

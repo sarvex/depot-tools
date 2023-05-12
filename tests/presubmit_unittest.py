@@ -345,7 +345,7 @@ class PresubmitUnittest(PresubmitTestsBase):
 
     self.failUnless(change.BUG == '123')
     self.failUnless(change.STORY == 'http://foo/')
-    self.failUnless(change.BLEH == None)
+    self.failUnless(change.BLEH is None)
 
     self.failUnless(len(change.AffectedFiles()) == 4)
     self.failUnless(len(change.AffectedFiles(include_dirs=True)) == 5)
@@ -364,17 +364,16 @@ class PresubmitUnittest(PresubmitTestsBase):
         len(filter(lambda x: x in expected_paths, local_paths)) == 4)
 
     server_paths = change.ServerPaths()
-    expected_paths = ['svn:/foo/%s' % f[1] for f in files if
-                      f[1] != 'flop/notfound.txt']
+    expected_paths = [
+        f'svn:/foo/{f[1]}' for f in files if f[1] != 'flop/notfound.txt'
+    ]
     expected_paths.append('')  # one unknown file
     self.assertEqual(
       len(filter(lambda x: x in expected_paths, server_paths)), 4)
 
     files = [[x[0], presubmit.normpath(x[1])] for x in files]
 
-    rhs_lines = []
-    for line in change.RightHandSideLines():
-      rhs_lines.append(line)
+    rhs_lines = list(change.RightHandSideLines())
     self.assertEquals(rhs_lines[0][0].LocalPath(), files[0][1])
     self.assertEquals(rhs_lines[0][1], 10)
     self.assertEquals(rhs_lines[0][2],'this is line number 10')
@@ -530,7 +529,7 @@ class PresubmitUnittest(PresubmitTestsBase):
 
     self.failUnless(change.BUG == '123')
     self.failUnless(change.STORY == 'http://foo/')
-    self.failUnless(change.BLEH == None)
+    self.failUnless(change.BLEH is None)
 
     self.failUnless(len(change.AffectedFiles()) == 7)
     self.failUnless(len(change.AffectedFiles(include_dirs=True)) == 7)
@@ -553,10 +552,8 @@ class PresubmitUnittest(PresubmitTestsBase):
     except NotImplementedError:
       pass
 
-    actual_rhs_lines = []
-    for f, linenum, line in change.RightHandSideLines():
-      actual_rhs_lines.append((f.LocalPath(), linenum, line))
-
+    actual_rhs_lines = [(f.LocalPath(), linenum, line)
+                        for f, linenum, line in change.RightHandSideLines()]
     f_blat = os.path.normpath('boo/blat.cc')
     f_test_expectations = os.path.normpath('foo/TestExpectations')
     expected_rhs_lines = [
@@ -935,7 +932,7 @@ def CheckChangeOnCommit(input_api, output_api):
     starts_with_space_result = ['  starts_with_space']
     not_list_result1 = "'foo'"
     not_list_result2 = "('a', 'tuple')"
-    mixed_old_and_new = ['bot', ('bot2', set(['test']))]
+    mixed_old_and_new = ['bot', ('bot2', {'test'})]
     not_set = [('bot2', ['test'])]
     for result in (
         starts_with_space_result, not_list_result1, not_list_result2,
@@ -948,7 +945,7 @@ def CheckChangeOnCommit(input_api, output_api):
     expected_result = ['1', '2', '3']
     empty_result = []
     space_in_name_result = ['foo bar', '1\t2 3']
-    new_style = [('bot', set(['cool', 'tests']))]
+    new_style = [('bot', {'cool', 'tests'})]
     for result in (
         expected_result, empty_result, space_in_name_result, new_style):
       self.assertEqual(
@@ -1052,12 +1049,18 @@ def CheckChangeOnCommit(input_api, output_api):
     self.assertEqual({},
         executer.ExecPresubmitScript('def foo():\n  return\n', '', '', change))
 
-    expected_result = {'m1': {'s1': set(['t1', 't2'])},
-                       'm2': {'s1': set(['defaulttests']),
-                              's2': set(['defaulttests'])}}
+    expected_result = {
+        'm1': {
+            's1': {'t1', 't2'}
+        },
+        'm2': {
+            's1': {'defaulttests'},
+            's2': {'defaulttests'}
+        },
+    }
     empty_result1 = {}
     empty_result2 = {'m': {}}
-    space_in_name_result = {'m r': {'s\tv': set(['t1'])}}
+    space_in_name_result = {'m r': {'s\tv': {'t1'}}}
     for result in (
         expected_result, empty_result1, empty_result2, space_in_name_result):
       self.assertEqual(
@@ -1071,19 +1074,37 @@ def CheckChangeOnCommit(input_api, output_api):
     self.assertEqual({'m1': {}}, merge({}, {'m1': {}}))
     self.assertEqual({'m1': {}}, merge({'m1': {}}, {}))
     parts = [
-      {'try1.cr': {'win': set(['defaulttests'])}},
-      {'try1.cr': {'linux1': set(['test1'])},
-       'try2.cr': {'linux2': set(['defaulttests'])}},
-      {'try1.cr': {'mac1': set(['defaulttests']),
-                   'mac2': set(['test1', 'test2']),
-                   'linux1': set(['defaulttests'])}},
+        {
+            'try1.cr': {
+                'win': {'defaulttests'}
+            }
+        },
+        {
+            'try1.cr': {
+                'linux1': {'test1'}
+            },
+            'try2.cr': {
+                'linux2': {'defaulttests'}
+            },
+        },
+        {
+            'try1.cr': {
+                'mac1': {'defaulttests'},
+                'mac2': {'test1', 'test2'},
+                'linux1': {'defaulttests'},
+            }
+        },
     ]
     expected = {
-      'try1.cr': {'win': set(['defaulttests']),
-                  'linux1': set(['defaulttests', 'test1']),
-                  'mac1': set(['defaulttests']),
-                  'mac2': set(['test1', 'test2'])},
-      'try2.cr': {'linux2': set(['defaulttests'])},
+        'try1.cr': {
+            'win': {'defaulttests'},
+            'linux1': {'defaulttests', 'test1'},
+            'mac1': {'defaulttests'},
+            'mac2': {'test1', 'test2'},
+        },
+        'try2.cr': {
+            'linux2': {'defaulttests'}
+        },
     }
     for permutation in itertools.permutations(parts):
       self.assertEqual(expected, reduce(merge, permutation, {}))
@@ -1215,7 +1236,7 @@ class InputApiUnittest(PresubmitTestsBase):
     path = presubmit.InputApi(
         self.fake_change, './p', False, None, False).DepotToLocalPath(
             'svn:/foo/notfound/burp')
-    self.failUnless(path == None)
+    self.failUnless(path is None)
 
   def testLocalToDepotPath(self):
     presubmit.scm.SVN._CaptureInfo(['smurf'], self.fake_root_dir
@@ -1332,7 +1353,7 @@ class InputApiUnittest(PresubmitTestsBase):
     # Ignores weird because of whitelist, third_party because of blacklist,
     # binary isn't a text file and beingdeleted doesn't exist. The rest is
     # outside foo/.
-    rhs_lines = [x for x in input_api.RightHandSideLines(None)]
+    rhs_lines = list(input_api.RightHandSideLines(None))
     self.assertEquals(len(rhs_lines), 14)
     self.assertEqual(rhs_lines[0][0].LocalPath(),
                      presubmit.normpath(files[0][1]))
@@ -2610,28 +2631,22 @@ class CannedChecksUnittest(PresubmitTestsBase):
           "reviewers": reviewers
         }
 
-      if is_committing:
-        people = approvers
-      else:
-        people = reviewers
-
+      people = approvers if is_committing else reviewers
       if issue:
         input_api.rietveld.get_issue_properties(
             issue=int(input_api.change.issue), messages=True).AndReturn(
                 rietveld_response)
 
       people.add(change.author_email)
-      fake_db.files_not_covered_by(set(['foo/xyz.cc']),
-          people).AndReturn(uncovered_files)
-      if not is_committing and uncovered_files:
-        fake_db.reviewers_for(set(['foo']),
-            change.author_email).AndReturn(change.author_email)
+      fake_db.files_not_covered_by({'foo/xyz.cc'}, people).AndReturn(uncovered_files)
+    if not is_committing and uncovered_files:
+      fake_db.reviewers_for({'foo'},
+                            change.author_email).AndReturn(change.author_email)
 
     self.mox.ReplayAll()
     output = presubmit.PresubmitOutput()
-    results = presubmit_canned_checks.CheckOwners(input_api,
-        presubmit.OutputApi)
-    if results:
+    if results := presubmit_canned_checks.CheckOwners(input_api,
+                                                      presubmit.OutputApi):
       results[0].handle(output)
     self.assertEquals(output.getvalue(), expected_output)
 
@@ -2645,14 +2660,18 @@ class CannedChecksUnittest(PresubmitTestsBase):
       ],
       "reviewers": ["ben@example.com"],
     }
-    self.AssertOwnersWorks(approvers=set(['ben@example.com']),
+    self.AssertOwnersWorks(
+        approvers={'ben@example.com'},
         rietveld_response=response,
-        expected_output='')
+        expected_output='',
+    )
 
-    self.AssertOwnersWorks(approvers=set(['ben@example.com']),
+    self.AssertOwnersWorks(
+        approvers={'ben@example.com'},
         is_committing=False,
         rietveld_response=response,
-        expected_output='')
+        expected_output='',
+    )
 
   def testCannedCheckOwners_NotApproved(self):
     response = {
@@ -2666,17 +2685,18 @@ class CannedChecksUnittest(PresubmitTestsBase):
     }
     self.AssertOwnersWorks(
         approvers=set(),
-        reviewers=set(["ben@example.com"]),
+        reviewers={"ben@example.com"},
         rietveld_response=response,
-        expected_output=
-            'Missing LGTM from someone other than john@example.com\n')
+        expected_output='Missing LGTM from someone other than john@example.com\n',
+    )
 
     self.AssertOwnersWorks(
         approvers=set(),
-        reviewers=set(["ben@example.com"]),
+        reviewers={"ben@example.com"},
         is_committing=False,
         rietveld_response=response,
-        expected_output='')
+        expected_output='',
+    )
 
   def testCannedCheckOwners_NoReviewers(self):
     response = {
@@ -2710,40 +2730,52 @@ class CannedChecksUnittest(PresubmitTestsBase):
         expected_output="")
 
   def testCannedCheckOwners_NoIssue(self):
-    self.AssertOwnersWorks(issue=None,
-        uncovered_files=set(['foo']),
+    self.AssertOwnersWorks(
+        issue=None,
+        uncovered_files={'foo'},
         expected_output="OWNERS check failed: this change has no Rietveld "
-                        "issue number, so we can't check it for approvals.\n")
-    self.AssertOwnersWorks(issue=None,
+        "issue number, so we can't check it for approvals.\n",
+    )
+    self.AssertOwnersWorks(
+        issue=None,
         is_committing=False,
-        uncovered_files=set(['foo']),
+        uncovered_files={'foo'},
         expected_output='Missing OWNER reviewers for these files:\n'
-                        '    foo\n')
+        '    foo\n',
+    )
 
   def testCannedCheckOwners_NoIssueLocalReviewers(self):
-    self.AssertOwnersWorks(issue=None,
-        reviewers=set(['jane@example.com']),
+    self.AssertOwnersWorks(
+        issue=None,
+        reviewers={'jane@example.com'},
         manually_specified_reviewers=['jane@example.com'],
         expected_output="OWNERS check failed: this change has no Rietveld "
-                        "issue number, so we can't check it for approvals.\n")
-    self.AssertOwnersWorks(issue=None,
-        reviewers=set(['jane@example.com']),
+        "issue number, so we can't check it for approvals.\n",
+    )
+    self.AssertOwnersWorks(
+        issue=None,
+        reviewers={'jane@example.com'},
         manually_specified_reviewers=['jane@example.com'],
         is_committing=False,
-        expected_output='')
+        expected_output='',
+    )
 
   def testCannedCheckOwners_NoIssueLocalReviewersDontInferEmailDomain(self):
-    self.AssertOwnersWorks(issue=None,
-        reviewers=set(['jane']),
+    self.AssertOwnersWorks(
+        issue=None,
+        reviewers={'jane'},
         manually_specified_reviewers=['jane@example.com'],
         expected_output="OWNERS check failed: this change has no Rietveld "
-                        "issue number, so we can't check it for approvals.\n")
-    self.AssertOwnersWorks(issue=None,
-        uncovered_files=set(['foo']),
+        "issue number, so we can't check it for approvals.\n",
+    )
+    self.AssertOwnersWorks(
+        issue=None,
+        uncovered_files={'foo'},
         manually_specified_reviewers=['jane'],
         is_committing=False,
         expected_output='Missing OWNER reviewers for these files:\n'
-                        '    foo\n')
+        '    foo\n',
+    )
 
   def testCannedCheckOwners_NoLGTM(self):
     self.AssertOwnersWorks(expected_output='Missing LGTM from someone '
@@ -2751,10 +2783,12 @@ class CannedChecksUnittest(PresubmitTestsBase):
     self.AssertOwnersWorks(is_committing=False, expected_output='')
 
   def testCannedCheckOwners_OnlyOwnerLGTM(self):
-    self.AssertOwnersWorks(approvers=set(['john@example.com']),
-                           expected_output='Missing LGTM from someone '
-                                           'other than john@example.com\n')
-    self.AssertOwnersWorks(approvers=set(['john@example.com']),
+    self.AssertOwnersWorks(
+        approvers={'john@example.com'},
+        expected_output='Missing LGTM from someone '
+        'other than john@example.com\n',
+    )
+    self.AssertOwnersWorks(approvers={'john@example.com'},
                            is_committing=False,
                            expected_output='')
 
@@ -2764,18 +2798,21 @@ class CannedChecksUnittest(PresubmitTestsBase):
     self.AssertOwnersWorks(tbr=True, is_committing=False, expected_output='')
 
   def testCannedCheckOwners_WithoutOwnerLGTM(self):
-    self.AssertOwnersWorks(uncovered_files=set(['foo']),
+    self.AssertOwnersWorks(
+        uncovered_files={'foo'},
         expected_output='Missing LGTM from an OWNER for these files:\n'
-                        '    foo\n')
-    self.AssertOwnersWorks(uncovered_files=set(['foo']),
+        '    foo\n',
+    )
+    self.AssertOwnersWorks(
+        uncovered_files={'foo'},
         is_committing=False,
         expected_output='Missing OWNER reviewers for these files:\n'
-                        '    foo\n')
+        '    foo\n',
+    )
 
   def testCannedCheckOwners_WithLGTMs(self):
-    self.AssertOwnersWorks(approvers=set(['ben@example.com']),
-                           uncovered_files=set())
-    self.AssertOwnersWorks(approvers=set(['ben@example.com']),
+    self.AssertOwnersWorks(approvers={'ben@example.com'}, uncovered_files=set())
+    self.AssertOwnersWorks(approvers={'ben@example.com'},
                            is_committing=False,
                            uncovered_files=set())
 

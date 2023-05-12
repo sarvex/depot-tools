@@ -122,7 +122,8 @@ def handle_commit_bot(repo_path, tx, commit_bot, admin_email):
     # The file format is described there:
     # http://svn.apache.org/repos/asf/subversion/trunk/notes/dump-load-format.txt
     propfilepath = os.path.join(
-        repo_path, 'db', 'transactions', tx + '.txn', 'props')
+        repo_path, 'db', 'transactions', f'{tx}.txn', 'props'
+    )
 
     # Do a lot of checks to make sure everything is in the expected format.
     try:

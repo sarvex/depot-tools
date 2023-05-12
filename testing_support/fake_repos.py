@@ -25,9 +25,8 @@ import subprocess2
 
 
 def write(path, content):
-  f = open(path, 'wb')
-  f.write(content)
-  f.close()
+  with open(path, 'wb') as f:
+    f.write(content)
 
 
 join = os.path.join
@@ -82,10 +81,10 @@ def commit_svn(repo, usr, pwd):
   match = re.search(r'(\d+)', out)
   if not match:
     raise Exception('Commit failed', out)
-  rev = match.group(1)
+  rev = match[1]
   status = subprocess2.check_output(['svn', 'status'], cwd=repo)
   assert len(status) == 0, status
-  logging.debug('At revision %s' % rev)
+  logging.debug(f'At revision {rev}')
   return rev
 
 
@@ -95,7 +94,7 @@ def commit_git(repo):
   subprocess2.check_call(['git', 'commit', '-q', '--message', 'foo'], cwd=repo)
   rev = subprocess2.check_output(
       ['git', 'show-ref', '--head', 'HEAD'], cwd=repo).split(' ', 1)[0]
-  logging.debug('At revision %s' % rev)
+  logging.debug(f'At revision {rev}')
   return rev
 
 
@@ -141,7 +140,7 @@ def wait_for_port_to_bind(host, port, process):
     sock.close()
   # The process failed to bind. Kill it and dump its ouput.
   process.kill()
-  logging.error('%s' % process.communicate()[0])
+  logging.error(f'{process.communicate()[0]}')
   assert False, '%d is still not bound' % port
 
 
@@ -222,12 +221,10 @@ class FakeReposBase(object):
 
   def cleanup_dirt(self):
     """For each dirty repository, destroy it."""
-    if self.svn_dirty:
-      if not self.tear_down_svn():
-        logging.error('Using both leaking checkout and svn dirty checkout')
-    if self.git_dirty:
-      if not self.tear_down_git():
-        logging.error('Using both leaking checkout and git dirty checkout')
+    if self.svn_dirty and not self.tear_down_svn():
+      logging.error('Using both leaking checkout and svn dirty checkout')
+    if self.git_dirty and not self.tear_down_git():
+      logging.error('Using both leaking checkout and git dirty checkout')
 
   def tear_down(self):
     """Kills the servers and delete the directories."""
@@ -239,7 +236,7 @@ class FakeReposBase(object):
 
   def tear_down_svn(self):
     if self.svnserve:
-      logging.debug('Killing svnserve pid %s' % self.svnserve.pid)
+      logging.debug(f'Killing svnserve pid {self.svnserve.pid}')
       try:
         self.svnserve.kill()
       except OSError as e:
@@ -249,24 +246,23 @@ class FakeReposBase(object):
       self.svnserve = None
       self.svn_port = None
       self.svn_base = None
-      if not self.trial.SHOULD_LEAK:
-        logging.debug('Removing %s' % self.svn_repo)
-        gclient_utils.rmtree(self.svn_repo)
-        logging.debug('Removing %s' % self.svn_checkout)
-        gclient_utils.rmtree(self.svn_checkout)
-      else:
+      if self.trial.SHOULD_LEAK:
         return False
+      logging.debug(f'Removing {self.svn_repo}')
+      gclient_utils.rmtree(self.svn_repo)
+      logging.debug(f'Removing {self.svn_checkout}')
+      gclient_utils.rmtree(self.svn_checkout)
     return True
 
   def tear_down_git(self):
     if self.gitdaemon:
-      logging.debug('Killing git-daemon pid %s' % self.gitdaemon.pid)
+      logging.debug(f'Killing git-daemon pid {self.gitdaemon.pid}')
       self.gitdaemon.kill()
       self.gitdaemon = None
       if self.git_pid_file:
         pid = int(self.git_pid_file.read())
         self.git_pid_file.close()
-        logging.debug('Killing git daemon pid %s' % pid)
+        logging.debug(f'Killing git daemon pid {pid}')
         try:
           subprocess2.kill_pid(pid)
         except OSError as e:
@@ -276,11 +272,10 @@ class FakeReposBase(object):
       wait_for_port_to_free(self.host, self.git_port)
       self.git_port = None
       self.git_base = None
-      if not self.trial.SHOULD_LEAK:
-        logging.debug('Removing %s' % self.git_root)
-        gclient_utils.rmtree(self.git_root)
-      else:
+      if self.trial.SHOULD_LEAK:
         return False
+      logging.debug(f'Removing {self.git_root}')
+      gclient_utils.rmtree(self.git_root)
     return True
 
   @staticmethod
@@ -359,7 +354,7 @@ class FakeReposBase(object):
     self.set_up()
     if self.gitdaemon:
       return True
-    assert self.git_pid_file == None
+    assert self.git_pid_file is None
     try:
       subprocess2.check_output(['git', '--version'])
     except (OSError, subprocess2.CalledProcessError):
@@ -371,14 +366,17 @@ class FakeReposBase(object):
     self.git_base = 'git://%s:%d/git/' % (self.host, self.git_port)
     # Start the daemon.
     self.git_pid_file = tempfile.NamedTemporaryFile()
-    cmd = ['git', 'daemon',
+    cmd = [
+        'git',
+        'daemon',
         '--export-all',
         '--reuseaddr',
-        '--base-path=' + self.root_dir,
-        '--pid-file=' + self.git_pid_file.name,
-        '--port=%d' % self.git_port]
+        f'--base-path={self.root_dir}',
+        f'--pid-file={self.git_pid_file.name}',
+        '--port=%d' % self.git_port,
+    ]
     if self.host == '127.0.0.1':
-      cmd.append('--listen=' + self.host)
+      cmd.append(f'--listen={self.host}')
     self.check_port_is_free(self.git_port)
     self.gitdaemon = subprocess2.Popen(
         cmd,
@@ -871,7 +869,7 @@ class FakeReposTestBase(trial_dir.TestCase):
 
   def setUp(self):
     super(FakeReposTestBase, self).setUp()
-    if not self.FAKE_REPOS_CLASS in self.CACHED_FAKE_REPOS:
+    if self.FAKE_REPOS_CLASS not in self.CACHED_FAKE_REPOS:
       self.CACHED_FAKE_REPOS[self.FAKE_REPOS_CLASS] = self.FAKE_REPOS_CLASS()
     self.FAKE_REPOS = self.CACHED_FAKE_REPOS[self.FAKE_REPOS_CLASS]
     # No need to call self.FAKE_REPOS.setUp(), it will be called by the child

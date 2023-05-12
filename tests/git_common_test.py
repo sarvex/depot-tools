@@ -262,7 +262,8 @@ class GitReadOnlyFunctionsTest(git_test_utils.GitRepoReadOnlyTestBase,
 
   def testTags(self):
     self.assertEqual(set(self.repo.run(self.gc.tags)),
-                     {'tag_'+l for l in 'ABCDE'})
+                     {f'tag_{l}'
+                      for l in 'ABCDE'})
 
   def testTree(self):
     tree = self.repo.run(self.gc.tree, 'master:some/files')

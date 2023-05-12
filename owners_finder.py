@@ -44,14 +44,13 @@ class OwnersFinder(object):
     filtered_files = files
 
     # Eliminate files that author himself can review.
-    if author:
-      if author in self.db.owned_by:
-        for dir_name in self.db.owned_by[author]:
-          filtered_files = [
-              file_name for file_name in filtered_files
-              if not file_name.startswith(dir_name)]
+    if author and author in self.db.owned_by:
+      for dir_name in self.db.owned_by[author]:
+        filtered_files = [
+            file_name for file_name in filtered_files
+            if not file_name.startswith(dir_name)]
 
-        filtered_files = list(filtered_files)
+      filtered_files = list(filtered_files)
 
     # Eliminate files that everyone can review.
     if owners_module.EVERYONE in self.db.owned_by:
@@ -101,8 +100,8 @@ class OwnersFinder(object):
       if (owner in self.selected_owners) or (owner in self.deselected_owners):
         continue
 
-      if not any((file_name in self.unreviewed_files)
-                 for file_name in self.owners_to_files[owner]):
+      if all(file_name not in self.unreviewed_files
+             for file_name in self.owners_to_files[owner]):
         self.deselect_owner(owner)
         continue
 
@@ -110,31 +109,31 @@ class OwnersFinder(object):
 
       while True:
         inp = self.input_command(owner)
-        if inp == 'y' or inp == 'yes':
+        if inp in ['y', 'yes']:
           self.select_owner(owner)
           break
-        elif inp == 'n' or inp == 'no':
+        elif inp in ['n', 'no']:
           self.deselect_owner(owner)
           break
-        elif inp == '' or inp == 'd' or inp == 'defer':
+        elif inp in ['', 'd', 'defer']:
           self.owners_queue.append(self.owners_queue.pop(0))
           break
-        elif inp == 'f' or inp == 'files':
+        elif inp in ['f', 'files']:
           self.list_files()
           break
-        elif inp == 'o' or inp == 'owners':
+        elif inp in ['o', 'owners']:
           self.list_owners(self.owners_queue)
           break
-        elif inp == 'p' or inp == 'pick':
+        elif inp in ['p', 'pick']:
           self.pick_owner(raw_input('Pick an owner: '))
           break
         elif inp.startswith('p ') or inp.startswith('pick '):
           self.pick_owner(inp.split(' ', 2)[1].strip())
           break
-        elif inp == 'r' or inp == 'restart':
+        elif inp in ['r', 'restart']:
           self.reset()
           break
-        elif inp == 'q' or inp == 'quit':
+        elif inp in ['q', 'quit']:
           # Exit with error
           return 1
 
@@ -168,10 +167,10 @@ class OwnersFinder(object):
     self.find_mandatory_owners()
 
   def select_owner(self, owner, findMandatoryOwners=True):
-    if owner in self.selected_owners or owner in self.deselected_owners\
-        or not (owner in self.owners_queue):
+    if (owner in self.selected_owners or owner in self.deselected_owners
+        or owner not in self.owners_queue):
       return
-    self.writeln('Selected: ' + owner)
+    self.writeln(f'Selected: {owner}')
     self.owners_queue.remove(owner)
     self.selected_owners.add(owner)
     for file_name in filter(
@@ -183,10 +182,10 @@ class OwnersFinder(object):
       self.find_mandatory_owners()
 
   def deselect_owner(self, owner, findMandatoryOwners=True):
-    if owner in self.selected_owners or owner in self.deselected_owners\
-        or not (owner in self.owners_queue):
+    if (owner in self.selected_owners or owner in self.deselected_owners
+        or owner not in self.owners_queue):
       return
-    self.writeln('Deselected: ' + owner)
+    self.writeln(f'Deselected: {owner}')
     self.owners_queue.remove(owner)
     self.deselected_owners.add(owner)
     for file_name in self.owners_to_files[owner] & self.unreviewed_files:
@@ -206,19 +205,19 @@ class OwnersFinder(object):
 
     while continues:
       continues = False
+      continues = True
       for file_name in filter(
           lambda file_name: len(self.files_to_owners[file_name]) == 1,
           self.unreviewed_files):
         owner = first(self.files_to_owners[file_name])
         self.select_owner(owner, False)
-        continues = True
         break
 
   def print_comments(self, owner):
     if owner not in self.comments:
       self.writeln(self.bold_name(owner))
     else:
-      self.writeln(self.bold_name(owner) + ' is commented as:')
+      self.writeln(f'{self.bold_name(owner)} is commented as:')
       self.indent()
       for path in self.comments[owner]:
         if len(self.comments[owner][path]) > 0:
@@ -235,26 +234,22 @@ class OwnersFinder(object):
                                ' (by ' +
                                self.bold_name(self.reviewed_by[file_name]) +
                                ')'))
+    elif len(self.files_to_owners[file_name]) <= 3:
+      other_owners = [
+          self.bold_name(ow) for ow in self.files_to_owners[file_name]
+          if ow != except_owner
+      ]
+      self.writeln(f'{file_name} [' + (', '.join(other_owners)) + ']')
     else:
-      if len(self.files_to_owners[file_name]) <= 3:
-        other_owners = []
-        for ow in self.files_to_owners[file_name]:
-          if ow != except_owner:
-            other_owners.append(self.bold_name(ow))
-        self.writeln(file_name +
-                     ' [' + (', '.join(other_owners)) + ']')
-      else:
-        self.writeln(file_name + ' [' +
-                     self.bold(str(len(self.files_to_owners[file_name]))) +
-                     ']')
+      self.writeln(
+          f'{file_name} [{self.bold(str(len(self.files_to_owners[file_name])))}]'
+      )
 
   def print_file_info_detailed(self, file_name):
     self.writeln(file_name)
     self.indent()
     for ow in sorted(self.files_to_owners[file_name]):
-      if ow in self.deselected_owners:
-        self.writeln(self.bold_name(self.greyed(ow)))
-      elif ow in self.selected_owners:
+      if ow in self.deselected_owners or ow in self.selected_owners:
         self.writeln(self.bold_name(self.greyed(ow)))
       else:
         self.writeln(self.bold_name(ow))
@@ -263,8 +258,9 @@ class OwnersFinder(object):
   def print_owned_files_for(self, owner):
     # Print owned files
     self.print_comments(owner)
-    self.writeln(self.bold_name(owner) + ' owns ' +
-                 str(len(self.owners_to_files[owner])) + ' file(s):')
+    self.writeln(
+        f'{self.bold_name(owner)} owns {len(self.owners_to_files[owner])} file(s):'
+    )
     self.indent()
     for file_name in sorted(self.owners_to_files[owner]):
       self.print_file_info(file_name, owner)
@@ -295,21 +291,21 @@ class OwnersFinder(object):
 
   def pick_owner(self, ow):
     # Allowing to omit domain suffixes
-    if ow not in self.owners_to_files:
-      if ow + self.email_postfix in self.owners_to_files:
-        ow += self.email_postfix
+    if (ow not in self.owners_to_files
+        and ow + self.email_postfix in self.owners_to_files):
+      ow += self.email_postfix
 
     if ow not in self.owners_to_files:
-      self.writeln('You cannot pick ' + self.bold_name(ow) + ' manually. ' +
-                   'It\'s an invalid name or not related to the change list.')
+      self.writeln((f'You cannot pick {self.bold_name(ow)} manually. ' +
+                    'It\'s an invalid name or not related to the change list.'))
       return False
     elif ow in self.selected_owners:
-      self.writeln('You cannot pick ' + self.bold_name(ow) + ' manually. ' +
-                   'It\'s already selected.')
+      self.writeln((f'You cannot pick {self.bold_name(ow)} manually. ' +
+                    'It\'s already selected.'))
       return False
     elif ow in self.deselected_owners:
-      self.writeln('You cannot pick ' + self.bold_name(ow) + ' manually.' +
-                   'It\'s already unselected.')
+      self.writeln((f'You cannot pick {self.bold_name(ow)} manually.' +
+                    'It\'s already unselected.'))
       return False
 
     self.select_owner(ow)
@@ -322,7 +318,7 @@ class OwnersFinder(object):
     self.writeln('** You selected these owners **')
     self.writeln()
     for owner in self.selected_owners:
-      self.writeln(self.bold_name(owner) + ':')
+      self.writeln(f'{self.bold_name(owner)}:')
       self.indent()
       for file_name in sorted(self.owners_to_files[owner]):
         self.writeln(file_name)
@@ -355,11 +351,10 @@ class OwnersFinder(object):
 
   def print_info(self, owner):
     self.hr()
-    self.writeln(
-        self.bold(str(len(self.unreviewed_files))) + ' file(s) left.')
+    self.writeln(f'{self.bold(str(len(self.unreviewed_files)))} file(s) left.')
     self.print_owned_files_for(owner)
 
   def input_command(self, owner):
-    self.writeln('Add ' + self.bold_name(owner) + ' as your reviewer? ')
+    self.writeln(f'Add {self.bold_name(owner)} as your reviewer? ')
     return raw_input(
         '[yes/no/Defer/pick/files/owners/quit/restart]: ').lower()

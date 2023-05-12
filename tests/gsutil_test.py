@@ -83,11 +83,11 @@ class GsutilUnitTests(unittest.TestCase):
 
   def test_download_gsutil(self):
     version = '4.2'
-    filename = 'gsutil_%s.zip' % version
+    filename = f'gsutil_{version}.zip'
     full_filename = os.path.join(self.tempdir, filename)
     fake_file = 'This is gsutil.zip'
     fake_file2 = 'This is other gsutil.zip'
-    url = '%s%s' % (gsutil.GSUTIL_URL, filename)
+    url = f'{gsutil.GSUTIL_URL}{filename}'
     self.fake.add_expectation(url, _returns=Buffer(fake_file))
 
     self.assertEquals(
@@ -120,7 +120,7 @@ class GsutilUnitTests(unittest.TestCase):
 
   def test_ensure_gsutil_full(self):
     version = '4.2'
-    gsutil_dir = os.path.join(self.tempdir, 'gsutil_%s' % version, 'gsutil')
+    gsutil_dir = os.path.join(self.tempdir, f'gsutil_{version}', 'gsutil')
     gsutil_bin = os.path.join(gsutil_dir, 'gsutil')
     os.makedirs(gsutil_dir)
 
@@ -130,8 +130,8 @@ class GsutilUnitTests(unittest.TestCase):
 
     with open(gsutil_bin, 'w') as f:
       f.write('Foobar')
-    zip_filename = 'gsutil_%s.zip' % version
-    url = '%s%s' % (gsutil.GSUTIL_URL, zip_filename)
+    zip_filename = f'gsutil_{version}.zip'
+    url = f'{gsutil.GSUTIL_URL}{zip_filename}'
     _, tempzip = tempfile.mkstemp()
     fake_gsutil = 'Fake gsutil'
     with zipfile.ZipFile(tempzip, 'w') as zf:
@@ -153,7 +153,7 @@ class GsutilUnitTests(unittest.TestCase):
 
   def test_ensure_gsutil_short(self):
     version = '4.2'
-    gsutil_dir = os.path.join(self.tempdir, 'gsutil_%s' % version, 'gsutil')
+    gsutil_dir = os.path.join(self.tempdir, f'gsutil_{version}', 'gsutil')
     gsutil_bin = os.path.join(gsutil_dir, 'gsutil')
     os.makedirs(gsutil_dir)
 

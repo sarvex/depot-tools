@@ -132,7 +132,7 @@ def ast2str(node, indent=0):
     if not node.elts:
       return '[]'
     elif len(node.elts) == 1:
-      return '[' + ast2str(node.elts[0], indent) + ']'
+      return f'[{ast2str(node.elts[0], indent)}]'
     return ('[\n' + ('  ' * (indent + 1)) +
             (',\n' + ('  ' * (indent + 1))).join(
                 [ast2str(x, indent + 1) for x in node.elts]) +
@@ -143,14 +143,13 @@ def ast2str(node, indent=0):
     elif len(node.keys) == 1:
       return '{%s: %s}' % (ast2str(node.keys[0]),
                            ast2str(node.values[0], indent + 1))
-    return ('{\n' + ('  ' * (indent + 1)) +
-            (',\n' + ('  ' * (indent + 1))).join(
-                ['%s: %s' % (ast2str(node.keys[i]),
-                             ast2str(node.values[i], indent + 1))
-                 for i in range(len(node.keys))]) +
-            '\n' + ('  ' * indent) + '}')
+    return ((
+        ('{\n' + ('  ' * (indent + 1)) + (',\n' + ('  ' * (indent + 1))).join([
+            f'{ast2str(node.keys[i])}: {ast2str(node.values[i], indent + 1)}'
+            for i in range(len(node.keys))
+        ])) + '\n') + '  ' * indent) + '}'
   elif t is ast.Str:
-    return "'%s'" % node.s
+    return f"'{node.s}'"
   else:
     raise gclient_utils.Error("Unexpected AST node at line %d, column %d: %s"
                               % (node.lineno, node.col_offset, t))
@@ -170,8 +169,7 @@ class GClientKeywords(object):
       self.sub_target_name = sub_target_name
 
     def __str__(self):
-      return 'From(%s, %s)' % (repr(self.module_name),
-                               repr(self.sub_target_name))
+      return f'From({repr(self.module_name)}, {repr(self.sub_target_name)})'
 
   class FileImpl(object):
     """Used to implement the File('') syntax which lets you sync a single file
@@ -181,7 +179,7 @@ class GClientKeywords(object):
       self.file_location = file_location
 
     def __str__(self):
-      return 'File("%s")' % self.file_location
+      return f'File("{self.file_location}")'
 
     def GetPath(self):
       return os.path.split(self.file_location)[0]
@@ -192,9 +190,7 @@ class GClientKeywords(object):
 
     def GetRevision(self):
       rev_tokens = self.file_location.split('@')
-      if len(rev_tokens) > 1:
-        return rev_tokens[1]
-      return None
+      return rev_tokens[1] if len(rev_tokens) > 1 else None
 
   class VarImpl(object):
     def __init__(self, custom_vars, local_scope):
@@ -207,7 +203,7 @@ class GClientKeywords(object):
         return self._custom_vars[var_name]
       elif var_name in self._local_scope.get("vars", {}):
         return self._local_scope["vars"][var_name]
-      raise gclient_utils.Error("Var is not defined: %s" % var_name)
+      raise gclient_utils.Error(f"Var is not defined: {var_name}")
 
 
 class DependencySettings(GClientKeywords):
@@ -276,10 +272,7 @@ class DependencySettings(GClientKeywords):
   @property
   def root(self):
     """Returns the root node, a GClient object."""
-    if not self.parent:
-      # This line is to signal pylint that it could be a GClient instance.
-      return self or GClient(None, None)
-    return self.parent.root
+    return self or GClient(None, None) if not self.parent else self.parent.root
 
   @property
   def safesync_url(self):
@@ -380,36 +373,25 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
   def requirements(self):
     """Calculate the list of requirements."""
     requirements = set()
-    # self.parent is implicitly a requirement. This will be recursive by
-    # definition.
-    if self.parent and self.parent.name:
-      requirements.add(self.parent.name)
+    if self.parent:
+      if self.parent.name:
+        requirements.add(self.parent.name)
 
-    # For a tree with at least 2 levels*, the leaf node needs to depend
-    # on the level higher up in an orderly way.
-    # This becomes messy for >2 depth as the DEPS file format is a dictionary,
-    # thus unsorted, while the .gclient format is a list thus sorted.
-    #
-    # * _recursion_limit is hard coded 2 and there is no hope to change this
-    # value.
-    #
-    # Interestingly enough, the following condition only works in the case we
-    # want: self is a 2nd level node. 3nd level node wouldn't need this since
-    # they already have their parent as a requirement.
-    if self.parent and self.parent.parent and not self.parent.parent.parent:
-      requirements |= set(i.name for i in self.root.dependencies if i.name)
+      if self.parent.parent and not self.parent.parent.parent:
+        requirements |= {i.name for i in self.root.dependencies if i.name}
 
     if isinstance(self.url, self.FromImpl):
       requirements.add(self.url.module_name)
 
     if self.name:
-      requirements |= set(
-          obj.name for obj in self.root.subtree(False)
-          if (obj is not self
-              and obj.name and
-              self.name.startswith(posixpath.join(obj.name, ''))))
+      requirements |= {
+          obj.name
+          for obj in self.root.subtree(False)
+          if (obj is not self and obj.name
+              and self.name.startswith(posixpath.join(obj.name, '')))
+      }
     requirements = tuple(sorted(requirements))
-    logging.info('Dependency(%s).requirements = %s' % (self.name, requirements))
+    logging.info(f'Dependency({self.name}).requirements = {requirements}')
     return requirements
 
   @property
@@ -424,9 +406,9 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     """Returns > 0 if this dependency is not too recursed to be processed."""
     # We continue to support the absence of recursedeps until tools and DEPS
     # using recursion_override are updated.
-    if self.try_recursedeps and self.parent.recursedeps != None:
-      if self.name in self.parent.recursedeps:
-        return 1
+    if (self.try_recursedeps and self.parent.recursedeps != None
+        and self.name in self.parent.recursedeps):
+      return 1
 
     if self.recursion_override is not None:
       return self.recursion_override
@@ -438,11 +420,11 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     Returns True if this entry should be added, False if it is a duplicate of
     another entry.
     """
-    logging.info('Dependency(%s).verify_validity()' % self.name)
+    logging.info(f'Dependency({self.name}).verify_validity()')
     if self.name in [s.name for s in self.parent.dependencies]:
       raise gclient_utils.Error(
-          'The same name "%s" appears multiple times in the deps section' %
-              self.name)
+          f'The same name "{self.name}" appears multiple times in the deps section'
+      )
     if not self.should_process:
       # Return early, no need to set requirements.
       return True
@@ -475,12 +457,10 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
 
     Manages From() keyword accordingly. Do not touch self.parsed_url nor
     self.url because it may called with other urls due to From()."""
-    assert self.parsed_url == None or not self.should_process, self.parsed_url
+    assert self.parsed_url is None or not self.should_process, self.parsed_url
     parsed_url = self.get_custom_deps(self.name, url)
     if parsed_url != url:
-      logging.info(
-          'Dependency(%s).LateOverride(%s) -> %s' %
-          (self.name, url, parsed_url))
+      logging.info(f'Dependency({self.name}).LateOverride({url}) -> {parsed_url}')
       return parsed_url
 
     if isinstance(url, self.FromImpl):
@@ -489,8 +469,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
           dep for dep in self.root.subtree(True) if url.module_name == dep.name
       ]
       if not ref:
-        raise gclient_utils.Error('Failed to find one reference to %s. %s' % (
-            url.module_name, ref))
+        raise gclient_utils.Error(
+            f'Failed to find one reference to {url.module_name}. {ref}')
       # It may happen that len(ref) > 1 but it's no big deal.
       ref = ref[0]
       sub_target = url.sub_target_name or self.name
@@ -505,8 +485,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
       found_dep = found_deps[0]
       parsed_url = found_dep.LateOverride(found_dep.url)
       logging.info(
-          'Dependency(%s).LateOverride(%s) -> %s (From)' %
-          (self.name, url, parsed_url))
+          f'Dependency({self.name}).LateOverride({url}) -> {parsed_url} (From)')
       return parsed_url
 
     if isinstance(url, basestring):
@@ -527,20 +506,15 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         parsed_url = scm.FullUrlForRelativeUrl(url)
       else:
         parsed_url = url
-      logging.info(
-          'Dependency(%s).LateOverride(%s) -> %s' %
-          (self.name, url, parsed_url))
+      logging.info(f'Dependency({self.name}).LateOverride({url}) -> {parsed_url}')
       return parsed_url
 
     if isinstance(url, self.FileImpl):
-      logging.info(
-          'Dependency(%s).LateOverride(%s) -> %s (File)' %
-          (self.name, url, url))
+      logging.info(f'Dependency({self.name}).LateOverride({url}) -> {url} (File)')
       return url
 
     if url is None:
-      logging.info(
-          'Dependency(%s).LateOverride(%s) -> %s' % (self.name, url, url))
+      logging.info(f'Dependency({self.name}).LateOverride({url}) -> {url}')
       return url
 
     raise gclient_utils.Error('Unknown url type')
@@ -560,19 +534,12 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     # If any os didn't specify a value (we have fewer value entries
     # than in the os list), then it wants to use the default value.
     for os_dep_key, os_dep_value in os_overrides.iteritems():
-      if len(os_dep_value) != len(target_os_list):
-        # Record the default value too so that we don't accidently
-        # set it to None or miss a conflicting DEPS.
-        if os_dep_key in deps:
-          os_dep_value.append(('default', deps[os_dep_key]))
+      if len(os_dep_value) != len(target_os_list) and os_dep_key in deps:
+        os_dep_value.append(('default', deps[os_dep_key]))
 
     target_os_deps = {}
     for os_dep_key, os_dep_value in os_overrides.iteritems():
-      # os_dep_value is a list of (os, value) pairs.
-      possible_values = set(x[1] for x in os_dep_value if x[1] is not None)
-      if not possible_values:
-        target_os_deps[os_dep_key] = None
-      else:
+      if possible_values := {x[1] for x in os_dep_value if x[1] is not None}:
         if len(possible_values) > 1:
           # It would be possible to abort here but it would be
           # unfortunate if we end up preventing any kind of checkout.
@@ -581,6 +548,8 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
         # Sorting to get the same result every time in case of conflicts.
         target_os_deps[os_dep_key] = sorted(possible_values)[0]
 
+      else:
+        target_os_deps[os_dep_key] = None
     new_deps = deps.copy()
     new_deps.update(target_os_deps)
     return new_deps
@@ -748,30 +717,31 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
     'options.revision'.
     If we have an explicit revision do nothing.
     """
-    if command == 'update' and options.transitive and not options.revision:
-      _, revision = gclient_utils.SplitUrlRevision(parsed_url)
-      if not revision:
-        options.revision = getattr(parent, '_used_revision', None)
-        if (options.revision and
-            not gclient_utils.IsDateRevision(options.revision)):
-          assert self.parent and self.parent.used_scm
-          # If this dependency is in the same repository as parent it's url will
-          # start with a slash. If so we take the parent revision instead of
-          # it's timestamp.
-          # (The timestamps of commits in google code are broken -- which can
-          # result in dependencies to be checked out at the wrong revision)
-          if self.url.startswith('/'):
-            if options.verbose:
-              print('Using parent\'s revision %s since we are in the same '
-                    'repository.' % options.revision)
-          else:
-            parent_revision_date = self.parent.used_scm.GetRevisionDate(
-                options.revision)
-            options.revision = gclient_utils.MakeDateRevision(
-                parent_revision_date)
-            if options.verbose:
-              print('Using parent\'s revision date %s since we are in a '
-                    'different repository.' % options.revision)
+    if command != 'update' or not options.transitive or options.revision:
+      return
+    _, revision = gclient_utils.SplitUrlRevision(parsed_url)
+    if not revision:
+      options.revision = getattr(parent, '_used_revision', None)
+      if (options.revision and
+          not gclient_utils.IsDateRevision(options.revision)):
+        assert self.parent and self.parent.used_scm
+        # If this dependency is in the same repository as parent it's url will
+        # start with a slash. If so we take the parent revision instead of
+        # it's timestamp.
+        # (The timestamps of commits in google code are broken -- which can
+        # result in dependencies to be checked out at the wrong revision)
+        if self.url.startswith('/'):
+          if options.verbose:
+            print('Using parent\'s revision %s since we are in the same '
+                  'repository.' % options.revision)
+        else:
+          parent_revision_date = self.parent.used_scm.GetRevisionDate(
+              options.revision)
+          options.revision = gclient_utils.MakeDateRevision(
+              parent_revision_date)
+          if options.verbose:
+            print('Using parent\'s revision date %s since we are in a '
+                  'different repository.' % options.revision)
 
   def findDepsFromNotAllowedHosts(self):
     """Returns a list of depenecies from not allowed hosts.
@@ -957,17 +927,16 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
           isinstance(self.parsed_url, self.FileImpl) or
           gclient_scm.GetScmName(self.parsed_url) in ('git', None) or
           os.path.isdir(os.path.join(self.root.root_dir, self.name, '.git'))):
-        for hook_dict in self.deps_hooks:
-          result.append(self.GetHookAction(hook_dict, []))
+        result.extend(
+            self.GetHookAction(hook_dict, []) for hook_dict in self.deps_hooks)
       else:
         # Run hooks on the basis of whether the files from the gclient operation
         # match each hook's pattern.
         for hook_dict in self.deps_hooks:
           pattern = re.compile(hook_dict['pattern'])
-          matching_file_list = [
+          if matching_file_list := [
               f for f in self.file_list_and_children if pattern.search(f)
-          ]
-          if matching_file_list:
+          ]:
             result.append(self.GetHookAction(hook_dict, matching_file_list))
     for s in self.dependencies:
       result.extend(s.GetHooks(options))
@@ -1026,8 +995,7 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
       if d.should_process or include_all:
         yield d
     for d in dependencies:
-      for i in d.subtree(include_all):
-        yield i
+      yield from d.subtree(include_all)
 
   def depth_first_tree(self):
     """Depth-first recursion including the root node."""
@@ -1121,27 +1089,27 @@ class Dependency(gclient_utils.WorkItem, DependencySettings):
               'processed', 'hooks_ran', 'deps_parsed', 'requirements',
               'allowed_hosts'):
       # First try the native property if it exists.
-      if hasattr(self, '_' + i):
-        value = getattr(self, '_' + i, False)
+      if hasattr(self, f'_{i}'):
+        value = getattr(self, f'_{i}', False)
       else:
         value = getattr(self, i, False)
       if value:
-        out.append('%s: %s' % (i, value))
+        out.append(f'{i}: {value}')
 
     for d in self.dependencies:
-      out.extend(['  ' + x for x in str(d).splitlines()])
+      out.extend([f'  {x}' for x in str(d).splitlines()])
       out.append('')
     return '\n'.join(out)
 
   def __repr__(self):
-    return '%s: %s' % (self.name, self.url)
+    return f'{self.name}: {self.url}'
 
   def hierarchy(self):
     """Returns a human-readable hierarchical reference to a Dependency."""
-    out = '%s(%s)' % (self.name, self.url)
+    out = f'{self.name}({self.url})'
     i = self.parent
     while i and i.name:
-      out = '%s(%s) -> %s' % (i.name, i.url, out)
+      out = f'{i.name}({i.url}) -> {out}'
       i = i.parent
     return out
 
@@ -1312,46 +1280,46 @@ want to set 'managed': False in .gclient.
     if not solutions:
       return self
     solutions = solutions[-1]
-    for solution in solutions.value.elts:
-      # Check for obsolete URL's
-      url_idx = ast_dict_index(solution, 'url')
-      if url_idx == -1:
-        continue
-      url_val = solution.values[url_idx]
-      if type(url_val) is not ast.Str:
-        continue
-      if (svn_url_re.match(url_val.s.strip())):
-        raise gclient_utils.Error(
-"""
+      for solution in solutions.value.elts:
+        # Check for obsolete URL's
+        url_idx = ast_dict_index(solution, 'url')
+        if url_idx == -1:
+          continue
+        url_val = solution.values[url_idx]
+        if type(url_val) is not ast.Str:
+          continue
+        if (svn_url_re.match(url_val.s.strip())):
+          raise gclient_utils.Error(
+    """
 The chromium code repository has migrated completely to git.
 Your SVN-based checkout is now obsolete; you need to create a brand-new
 git checkout by following these instructions:
 
 http://www.chromium.org/developers/how-tos/get-the-code
 """)
-      if (old_git_re.match(url_val.s.strip())):
-        url_val.s = CHROMIUM_SRC_URL
-        modified = True
+        if (old_git_re.match(url_val.s.strip())):
+          url_val.s = CHROMIUM_SRC_URL
+          modified = True
 
-      # Ensure deps_file is set to .DEPS.git.  We enforce this here to smooth
-      # over switching between pre-git-migration and post-git-migration
-      # revisions.
-      #   - For pre-migration revisions, .DEPS.git must be explicitly set.
-      #   - For post-migration revisions, .DEPS.git is not present, so gclient
-      #     will correctly fall back to DEPS.
-      if url_val.s == CHROMIUM_SRC_URL:
-        deps_file_idx = ast_dict_index(solution, 'deps_file')
-        if deps_file_idx != -1:
-          continue
-        solution.keys.append(ast.Str('deps_file'))
-        solution.values.append(ast.Str('.DEPS.git'))
-        modified = True
+        # Ensure deps_file is set to .DEPS.git.  We enforce this here to smooth
+        # over switching between pre-git-migration and post-git-migration
+        # revisions.
+        #   - For pre-migration revisions, .DEPS.git must be explicitly set.
+        #   - For post-migration revisions, .DEPS.git is not present, so gclient
+        #     will correctly fall back to DEPS.
+        if url_val.s == CHROMIUM_SRC_URL:
+          deps_file_idx = ast_dict_index(solution, 'deps_file')
+          if deps_file_idx != -1:
+            continue
+          solution.keys.append(ast.Str('deps_file'))
+          solution.values.append(ast.Str('.DEPS.git'))
+          modified = True
 
     if not modified:
       return self
 
-    print(
-"""
+      print(
+    """
 WARNING: gclient detected an obsolete setting in your %s file.  The file has
 been automagically updated.  The previous version is available at %s.old.
 """ % (options.config_filename, options.config_filename))
@@ -1361,7 +1329,7 @@ been automagically updated.  The previous version is available at %s.old.
     new_content = ast2str(a)
     dot_gclient_fn = os.path.join(path, options.config_filename)
     try:
-      os.rename(dot_gclient_fn, dot_gclient_fn + '.old')
+      os.rename(dot_gclient_fn, f'{dot_gclient_fn}.old')
     except OSError:
       pass
     with open(dot_gclient_fn, 'w') as fh:
@@ -1453,20 +1421,18 @@ been automagically updated.  The previous version is available at %s.old.
     if not self._options.revisions:
       for s in self.dependencies:
         if not s.managed:
-          self._options.revisions.append('%s@unmanaged' % s.name)
+          self._options.revisions.append(f'{s.name}@unmanaged')
         elif s.safesync_url:
           self._ApplySafeSyncRev(dep=s)
     if not self._options.revisions:
       return revision_overrides
     solutions_names = [s.name for s in self.dependencies]
-    index = 0
-    for revision in self._options.revisions:
-      if not '@' in revision:
+    for index, revision in enumerate(self._options.revisions):
+      if '@' not in revision:
         # Support for --revision 123
-        revision = '%s@%s' % (solutions_names[index], revision)
+        revision = f'{solutions_names[index]}@{revision}'
       name, rev = revision.split('@', 1)
       revision_overrides[name] = rev
-      index += 1
     return revision_overrides
 
   def _ApplySafeSyncRev(self, dep):
@@ -1487,7 +1453,7 @@ been automagically updated.  The previous version is available at %s.old.
     safe_rev = scm.GetUsableRev(rev, self._options)
     if self._options.verbose:
       print('Using safesync_url revision: %s.\n' % safe_rev)
-    self._options.revisions.append('%s@%s' % (dep.name, safe_rev))
+    self._options.revisions.append(f'{dep.name}@{safe_rev}')
 
   def RunOnDeps(self, command, args, ignore_requirements=False, progress=True):
     """Runs a command on each dependency in a client and its dependencies.
@@ -1649,7 +1615,7 @@ been automagically updated.  The previous version is available at %s.old.
           original_url, self.root_dir, dep.name, self.outbuf)
       if not os.path.isdir(scm.checkout_path):
         return None
-      return '%s@%s' % (url, scm.revinfo(self._options, [], None))
+      return f'{url}@{scm.revinfo(self._options, [], None)}'
 
     if self._options.snapshot:
       new_gclient = ''
@@ -1682,13 +1648,10 @@ been automagically updated.  The previous version is available at %s.old.
     else:
       entries = {}
       for d in self.root.subtree(False):
-        if self._options.actual:
-          entries[d.name] = GetURLAndRev(d)
-        else:
-          entries[d.name] = d.parsed_url
+        entries[d.name] = GetURLAndRev(d) if self._options.actual else d.parsed_url
       keys = sorted(entries.keys())
       for x in keys:
-        print('%s: %s' % (x, entries[x]))
+        print(f'{x}: {entries[x]}')
     logging.info(str(self))
 
   def ParseDepsFile(self):
@@ -1877,9 +1840,7 @@ def CMDconfig(parser, args):
       # specify an alternate relpath for the given URL.
       name = options.name
     deps_file = options.deps_file
-    safesync_url = ''
-    if len(args) > 1:
-      safesync_url = args[1]
+    safesync_url = args[1] if len(args) > 1 else ''
     client.SetDefaultConfig(name, deps_file, base_url, safesync_url,
                             managed=not options.unmanaged,
                             cache_dir=options.cache_dir)
@@ -2095,10 +2056,10 @@ def CMDrevert(parser, args):
   options.force = True
   options.reset = False
   options.delete_unversioned_trees = False
-  client = GClient.LoadCurrentConfig(options)
-  if not client:
+  if client := GClient.LoadCurrentConfig(options):
+    return client.RunOnDeps('revert', args)
+  else:
     raise gclient_utils.Error('client not configured; see \'gclient config\'')
-  return client.RunOnDeps('revert', args)
 
 
 def CMDrunhooks(parser, args):
@@ -2187,8 +2148,7 @@ class OptionParser(optparse.OptionParser):
   gclientfile_default = os.environ.get('GCLIENT_FILE', '.gclient')
 
   def __init__(self, **kwargs):
-    optparse.OptionParser.__init__(
-        self, version='%prog ' + __version__, **kwargs)
+    optparse.OptionParser.__init__(self, version=f'%prog {__version__}', **kwargs)
 
     # Some arm boards have issues with parallel sync.
     if platform.machine().startswith('arm'):
@@ -2211,8 +2171,10 @@ class OptionParser(optparse.OptionParser):
         help='Produces additional output for diagnostics. Can be used up to '
              'three times for more logging info.')
     self.add_option(
-        '--gclientfile', dest='config_filename',
-        help='Specify an alternate %s file' % self.gclientfile_default)
+        '--gclientfile',
+        dest='config_filename',
+        help=f'Specify an alternate {self.gclientfile_default} file',
+    )
     self.add_option(
         '--spec',
         help='create a gclient file containing the provided string. Due to '
@@ -2235,7 +2197,7 @@ class OptionParser(optparse.OptionParser):
       self.error('--gclientfile target must be a filename, not a path')
     if not options.config_filename:
       options.config_filename = self.gclientfile_default
-    options.entries_filename = options.config_filename + '_entries'
+    options.entries_filename = f'{options.config_filename}_entries'
     if options.jobs < 1:
       self.error('--jobs must be 1 or higher')
 
@@ -2295,7 +2257,7 @@ def main(argv):
   return 0
 
 
-if '__main__' == __name__:
+if __name__ == '__main__':
   try:
     sys.exit(main(sys.argv[1:]))
   except KeyboardInterrupt:

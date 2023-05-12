@@ -26,14 +26,9 @@ import xml.sax
 
 
 def pythonize_name(name, sep='_'):
-    s = ''
-    if name[0].isupper:
-        s = name[0].lower()
+    s = name[0].lower() if name[0].isupper else ''
     for c in name[1:]:
-        if c.isupper():
-            s += sep + c.lower()
-        else:
-            s += c
+        s += sep + c.lower() if c.isupper() else c
     return s
 
 
@@ -76,10 +71,7 @@ class Element(dict):
         self.element_name = element_name
         self.list_marker = list_marker or ['Set']
         self.item_marker = item_marker or ['member', 'item']
-        if stack is None:
-            self.stack = []
-        else:
-            self.stack = stack
+        self.stack = [] if stack is None else stack
         self.pythonize_name = pythonize_name
         self.parent = parent
 
@@ -108,21 +100,19 @@ class Element(dict):
                                 self.item_marker, self.pythonize_name)
                 self[self.get_name(name)] = l
                 return l
-        if len(self.stack) > 0:
-            element_name = self.stack[-1]
-            e = Element(self.connection, element_name, self.stack, self,
-                        self.list_marker, self.item_marker,
-                        self.pythonize_name)
-            self[self.get_name(element_name)] = e
-            return (element_name, e)
-        else:
+        if len(self.stack) <= 0:
             return None
+        element_name = self.stack[-1]
+        e = Element(self.connection, element_name, self.stack, self,
+                    self.list_marker, self.item_marker,
+                    self.pythonize_name)
+        self[self.get_name(element_name)] = e
+        return (element_name, e)
 
     def endElement(self, name, value, connection):
         if len(self.stack) > 0:
             self.stack.pop()
-        value = value.strip()
-        if value:
+        if value := value.strip():
             if isinstance(self.parent, Element):
                 self.parent[self.get_name(name)] = value
             elif isinstance(self.parent, ListElement):
@@ -167,11 +157,7 @@ class ListElement(list):
     def endElement(self, name, value, connection):
         if name == self.element_name:
             if len(self) > 0:
-                empty = []
-                for e in self:
-                    if isinstance(e, Element):
-                        if len(e) == 0:
-                            empty.append(e)
+                empty = [e for e in self if isinstance(e, Element) and len(e) == 0]
                 for e in empty:
                     self.remove(e)
         else:

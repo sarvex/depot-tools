@@ -19,8 +19,7 @@ import git_cl
 def GetRietveldIssueNumber():
   try:
     return GIT.Capture(
-        ['config', 'branch.%s.rietveldissue' % GIT.GetBranch('.')],
-        '.').strip()
+        ['config', f"branch.{GIT.GetBranch('.')}.rietveldissue"], '.').strip()
   except subprocess2.CalledProcessError:
     return None
 
@@ -28,7 +27,7 @@ def GetRietveldIssueNumber():
 def GetRietveldPatchsetNumber():
   try:
     return GIT.Capture(
-        ['config', 'branch.%s.rietveldpatchset' % GIT.GetBranch('.')],
+        ['config', f"branch.{GIT.GetBranch('.')}.rietveldpatchset"],
         '.').strip()
   except subprocess2.CalledProcessError:
     return None

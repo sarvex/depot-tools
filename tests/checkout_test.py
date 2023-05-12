@@ -59,69 +59,29 @@ class FakeRepos(fake_repos.FakeReposBase):
 
   @staticmethod
   def _git_tree():
-    fs = {}
-    fs['origin'] = 'git@1'
-    fs['extra'] = 'dummy\n'  # new
-    fs['codereview.settings'] = (
-        '# Test data\n'
-        'bar: pouet\n')
-    fs['chrome/file.cc'] = (
-        'a\n'
-        'bb\n'
-        'ccc\n'
-        'dd\n'
-        'e\n'
-        'ff\n'
-        'ggg\n'
-        'hh\n'
-        'i\n'
-        'jj\n'
-        'kkk\n'
-        'll\n'
-        'm\n'
-        'nn\n'
-        'ooo\n'
-        'pp\n'
-        'q\n')
-    fs['chromeos/views/DOMui_menu_widget.h'] = (
-      '// Copyright (c) 2010\n'
-      '// Use of this source code\n'
-      '// found in the LICENSE file.\n'
-      '\n'
-      '#ifndef DOM\n'
-      '#define DOM\n'
-      '#pragma once\n'
-      '\n'
-      '#include <string>\n'
-      '#endif\n')
-    return fs
+    return {
+        'origin':
+        'git@1',
+        'extra':
+        'dummy\n',
+        'codereview.settings':
+        '# Test data\nbar: pouet\n',
+        'chrome/file.cc':
+        'a\nbb\nccc\ndd\ne\nff\nggg\nhh\ni\njj\nkkk\nll\nm\nnn\nooo\npp\nq\n',
+        'chromeos/views/DOMui_menu_widget.h':
+        '// Copyright (c) 2010\n// Use of this source code\n// found in the LICENSE file.\n\n#ifndef DOM\n#define DOM\n#pragma once\n\n#include <string>\n#endif\n',
+    }
 
   @staticmethod
   def _svn_tree_1():
-    fs = {}
-    fs['trunk/origin'] = 'svn@1'
-    fs['trunk/codereview.settings'] = (
-        '# Test data\n'
-        'bar: pouet\n')
-    fs['trunk/chrome/file.cc'] = (
-        'a\n'
-        'bb\n'
-        'ccc\n'
-        'dd\n'
-        'e\n'
-        'ff\n'
-        'ggg\n'
-        'hh\n'
-        'i\n'
-        'jj\n'
-        'kkk\n'
-        'll\n'
-        'm\n'
-        'nn\n'
-        'ooo\n'
-        'pp\n'
-        'q\n')
-    return fs
+    return {
+        'trunk/origin':
+        'svn@1',
+        'trunk/codereview.settings':
+        '# Test data\nbar: pouet\n',
+        'trunk/chrome/file.cc':
+        'a\nbb\nccc\ndd\ne\nff\nggg\nhh\ni\njj\nkkk\nll\nm\nnn\nooo\npp\nq\n',
+    }
 
   @classmethod
   def _svn_tree_2(cls):
@@ -258,7 +218,7 @@ class SvnBaseTest(BaseTest):
          '--with-all-revprops', '--xml',
          '--limit', '1'])
     logentry = ElementTree.XML(out).find('logentry')
-    if logentry == None:
+    if logentry is None:
       return {'revision': 0}
     data = {
         'revision': int(logentry.attrib['revision']),
@@ -267,6 +227,7 @@ class SvnBaseTest(BaseTest):
       item = logentry.find(name)
       if item != None:
         data[name] = item.text
+
     set_item('author')
     set_item('msg')
     revprops = logentry.find('revprops')
@@ -334,8 +295,8 @@ class SvnBaseTest(BaseTest):
 
     if modified:
       content_lines = tree['chrome/file.cc'].splitlines(True)
-      tree['chrome/file.cc'] = ''.join(
-          content_lines[0:5] + ['FOO!\n'] + content_lines[5:])
+      tree['chrome/file.cc'] = ''.join(content_lines[:5] + ['FOO!\n'] +
+                                       content_lines[5:])
       del tree['extra']
       tree['new_dir/subdir/new_file'] = 'A new file\nshould exist.\n'
     return tree
@@ -427,8 +388,8 @@ class GitBaseTest(BaseTest):
 
     if modified:
       content_lines = tree['chrome/file.cc'].splitlines(True)
-      tree['chrome/file.cc'] = ''.join(
-          content_lines[0:5] + ['FOO!\n'] + content_lines[5:])
+      tree['chrome/file.cc'] = ''.join(content_lines[:5] + ['FOO!\n'] +
+                                       content_lines[5:])
       tree['bin_file'] = '\x00'
       del tree['extra']
       tree['new_dir/subdir/new_file'] = 'A new file\nshould exist.\n'
@@ -610,18 +571,16 @@ class SvnCheckout(SvnBaseTest):
         env=env)
     values = dict(l.split(': ', 1) for l in out.splitlines() if l)
     expected = {
-      # checksum seems to vary with svn version so we can't check it
-      #'Checksum': '65837bb3da662c8fa88a4a50940ea7c6',
-      'Copied From Rev': '2',
-      'Copied From URL':
-          '%strunk/chromeos/views/DOMui_menu_widget.h' % self.svn_base,
-      'Name': 'webui_menu_widget.h',
-      'Node Kind': 'file',
-      'Path': 'chromeos/views/webui_menu_widget.h',
-      'Repository Root': '%s' % self.svn_base.rstrip('/'),
-      'Revision': '2',
-      'Schedule': 'add',
-      'URL': '%strunk/chromeos/views/webui_menu_widget.h' % self.svn_base,
+        'Copied From Rev': '2',
+        'Copied From URL':
+        f'{self.svn_base}trunk/chromeos/views/DOMui_menu_widget.h',
+        'Name': 'webui_menu_widget.h',
+        'Node Kind': 'file',
+        'Path': 'chromeos/views/webui_menu_widget.h',
+        'Repository Root': f"{self.svn_base.rstrip('/')}",
+        'Revision': '2',
+        'Schedule': 'add',
+        'URL': f'{self.svn_base}trunk/chromeos/views/webui_menu_widget.h',
     }
     for key in expected:
       self.assertIn(key, values)

@@ -49,20 +49,20 @@ class TrialDir(object):
   def tear_down(self):
     """Cleans the trial subdirectory for this instance."""
     if not self.leak:
-      logging.debug('Removing %s' % self.root_dir)
+      logging.debug(f'Removing {self.root_dir}')
       gclient_utils.rmtree(self.root_dir)
     else:
-      logging.error('Leaking %s' % self.root_dir)
+      logging.error(f'Leaking {self.root_dir}')
     self.root_dir = None
 
   @staticmethod
   def _clean():
     """Cleans the root trial directory."""
     if not TrialDir.SHOULD_LEAK:
-      logging.debug('Removing %s' % TrialDir.TRIAL_ROOT)
+      logging.debug(f'Removing {TrialDir.TRIAL_ROOT}')
       gclient_utils.rmtree(TrialDir.TRIAL_ROOT)
     else:
-      logging.error('Leaking %s' % TrialDir.TRIAL_ROOT)
+      logging.error(f'Leaking {TrialDir.TRIAL_ROOT}')
 
 
 class TrialDirMixIn(object):

@@ -38,7 +38,7 @@ def GetCasedPath(path):
       # glob.glob will return the cased path for the last item only. This is why
       # we are calling it in a loop. Extract the data we want and put it back
       # into the list.
-      paths[i] = glob.glob(subpath + '*')[0][prev+1:len(subpath)]
+      paths[i] = glob.glob(f'{subpath}*')[0][prev+1:len(subpath)]
     path = '\\'.join(paths)
   return path
 
@@ -87,10 +87,7 @@ def determine_scm(root):
 
 
 def only_int(val):
-  if val.isdigit():
-    return int(val)
-  else:
-    return 0
+  return int(val) if val.isdigit() else 0
 
 
 class GIT(object):
@@ -130,10 +127,15 @@ class GIT(object):
     Returns an array of (status, file) tuples."""
     if upstream_branch is None:
       upstream_branch = GIT.GetUpstreamBranch(cwd)
-      if upstream_branch is None:
-        raise gclient_utils.Error('Cannot determine upstream branch')
-    command = ['diff', '--name-status', '--no-renames',
-               '-r', '%s...' % upstream_branch]
+    if upstream_branch is None:
+      raise gclient_utils.Error('Cannot determine upstream branch')
+    command = [
+        'diff',
+        '--name-status',
+        '--no-renames',
+        '-r',
+        f'{upstream_branch}...',
+    ]
     if not files:
       pass
     elif isinstance(files, basestring):
@@ -144,15 +146,11 @@ class GIT(object):
     results = []
     if status:
       for statusline in status.splitlines():
-        # 3-way merges can cause the status can be 'MMM' instead of 'M'. This
-        # can happen when the user has 2 local branches and he diffs between
-        # these 2 branches instead diffing to upstream.
-        m = re.match('^(\w)+\t(.+)$', statusline)
-        if not m:
-          raise gclient_utils.Error(
-              'status currently unsupported: %s' % statusline)
-        # Only grab the first letter.
-        results.append(('%s      ' % m.group(1)[0], m.group(2)))
+        if m := re.match('^(\w)+\t(.+)$', statusline):
+                # Only grab the first letter.
+          results.append((f'{m[1][0]}      ', m[2]))
+        else:
+          raise gclient_utils.Error(f'status currently unsupported: {statusline}')
     return results
 
   @staticmethod
@@ -204,14 +202,13 @@ class GIT(object):
     """
     fetch_suburl, as_ref = glob_spec.split(':')
     if allow_wildcards:
-      glob_match = re.match('(.+/)?(\*|{[^/]*})(/.+)?', fetch_suburl)
-      if glob_match:
+      if glob_match := re.match('(.+/)?(\*|{[^/]*})(/.+)?', fetch_suburl):
         # Parse specs like "branches/*/src:refs/remotes/svn/*" or
         # "branches/{472,597,648}/src:refs/remotes/svn/*".
         branch_re = re.escape(base_url)
-        if glob_match.group(1):
-          branch_re += '/' + re.escape(glob_match.group(1))
-        wildcard = glob_match.group(2)
+        if glob_match[1]:
+          branch_re += f'/{re.escape(glob_match[1])}'
+        wildcard = glob_match[2]
         if wildcard == '*':
           branch_re += '([^/]*)'
         else:
@@ -222,20 +219,14 @@ class GIT(object):
           wildcard = re.sub('\\\\,', '|', wildcard)
           wildcard = re.sub('\\\\}$', ')', wildcard)
           branch_re += wildcard
-        if glob_match.group(3):
-          branch_re += re.escape(glob_match.group(3))
-        match = re.match(branch_re, url)
-        if match:
-          return re.sub('\*$', match.group(1), as_ref)
+        if glob_match[3]:
+          branch_re += re.escape(glob_match[3])
+        if match := re.match(branch_re, url):
+          return re.sub('\*$', match[1], as_ref)
 
     # Parse specs like "trunk/src:refs/remotes/origin/trunk".
-    if fetch_suburl:
-      full_url = base_url + '/' + fetch_suburl
-    else:
-      full_url = base_url
-    if full_url == url:
-      return as_ref
-    return None
+    full_url = f'{base_url}/{fetch_suburl}' if fetch_suburl else base_url
+    return as_ref if full_url == url else None
 
   @staticmethod
   def GetSVNBranch(cwd):
@@ -255,9 +246,8 @@ class GIT(object):
     proc = subprocess2.Popen(cmd, cwd=cwd, stdout=subprocess2.PIPE)
     url = None
     for line in proc.stdout:
-      match = git_svn_re.match(line)
-      if match:
-        url = match.group(1)
+      if match := git_svn_re.match(line):
+        url = match[1]
         proc.stdout.close()  # Cut pipe.
         break
 
@@ -267,14 +257,12 @@ class GIT(object):
           ['config', '--local', '--get-regexp', r'^svn-remote\..*\.url'],
           cwd=cwd).splitlines()
       for remote in remotes:
-        match = svn_remote_re.match(remote)
-        if match:
-          remote = match.group(1)
-          base_url = match.group(2)
+        if match := svn_remote_re.match(remote):
+          remote = match[1]
+          base_url = match[2]
           try:
             fetch_spec = GIT.Capture(
-                ['config', '--local', 'svn-remote.%s.fetch' % remote],
-                cwd=cwd)
+                ['config', '--local', f'svn-remote.{remote}.fetch'], cwd=cwd)
             branch = GIT.MatchSvnGlob(url, base_url, fetch_spec, False)
           except subprocess2.CalledProcessError:
             branch = None
@@ -282,8 +270,7 @@ class GIT(object):
             return branch
           try:
             branch_spec = GIT.Capture(
-                ['config', '--local', 'svn-remote.%s.branches' % remote],
-                cwd=cwd)
+                ['config', '--local', f'svn-remote.{remote}.branches'], cwd=cwd)
             branch = GIT.MatchSvnGlob(url, base_url, branch_spec, True)
           except subprocess2.CalledProcessError:
             branch = None
@@ -291,8 +278,7 @@ class GIT(object):
             return branch
           try:
             tag_spec = GIT.Capture(
-                ['config', '--local', 'svn-remote.%s.tags' % remote],
-                cwd=cwd)
+                ['config', '--local', f'svn-remote.{remote}.tags'], cwd=cwd)
             branch = GIT.MatchSvnGlob(url, base_url, tag_spec, True)
           except subprocess2.CalledProcessError:
             branch = None
@@ -309,13 +295,12 @@ class GIT(object):
     branch = GIT.GetBranch(cwd)
     try:
       upstream_branch = GIT.Capture(
-          ['config', '--local', 'branch.%s.merge' % branch], cwd=cwd)
+          ['config', '--local', f'branch.{branch}.merge'], cwd=cwd)
     except subprocess2.CalledProcessError:
       upstream_branch = None
     if upstream_branch:
       try:
-        remote = GIT.Capture(
-            ['config', '--local', 'branch.%s.remote' % branch], cwd=cwd)
+        remote = GIT.Capture(['config', '--local', f'branch.{branch}.remote'], cwd=cwd)
       except subprocess2.CalledProcessError:
         pass
     else:
@@ -330,26 +315,24 @@ class GIT(object):
               ['config', '--local', 'rietveld.upstream-remote'], cwd=cwd)
         except subprocess2.CalledProcessError:
           pass
+      elif GIT.IsGitSvn(cwd):
+        upstream_branch = GIT.GetSVNBranch(cwd)
       else:
-        # Fall back on trying a git-svn upstream branch.
-        if GIT.IsGitSvn(cwd):
-          upstream_branch = GIT.GetSVNBranch(cwd)
+        # Else, try to guess the origin remote.
+        remote_branches = GIT.Capture(['branch', '-r'], cwd=cwd).split()
+        if 'origin/master' in remote_branches:
+          # Fall back on origin/master if it exits.
+          remote = 'origin'
+          upstream_branch = 'refs/heads/master'
+        elif 'origin/trunk' in remote_branches:
+          # Fall back on origin/trunk if it exists. Generally a shared
+          # git-svn clone
+          remote = 'origin'
+          upstream_branch = 'refs/heads/trunk'
         else:
-          # Else, try to guess the origin remote.
-          remote_branches = GIT.Capture(['branch', '-r'], cwd=cwd).split()
-          if 'origin/master' in remote_branches:
-            # Fall back on origin/master if it exits.
-            remote = 'origin'
-            upstream_branch = 'refs/heads/master'
-          elif 'origin/trunk' in remote_branches:
-            # Fall back on origin/trunk if it exists. Generally a shared
-            # git-svn clone
-            remote = 'origin'
-            upstream_branch = 'refs/heads/trunk'
-          else:
-            # Give up.
-            remote = None
-            upstream_branch = None
+          # Give up.
+          remote = None
+          upstream_branch = None
     return remote, upstream_branch
 
   @staticmethod
@@ -360,17 +343,12 @@ class GIT(object):
       A tuple of the remote ref's (common prefix, unique suffix), or None if it
       doesn't appear to refer to a remote ref (e.g. it's a commit hash).
     """
-    # TODO(mmoss): This is just a brute-force mapping based of the expected git
-    # config. It's a bit better than the even more brute-force replace('heads',
-    # ...), but could still be smarter (like maybe actually using values gleaned
-    # from the git config).
-    m = re.match('^(refs/(remotes/)?)?branch-heads/', ref or '')
-    if m:
-      return ('refs/remotes/branch-heads/', ref.replace(m.group(0), ''))
+    if m := re.match('^(refs/(remotes/)?)?branch-heads/', ref or ''):
+      return 'refs/remotes/branch-heads/', ref.replace(m[0], '')
     if remote:
-      m = re.match('^((refs/)?remotes/)?%s/|(refs/)?heads/' % remote, ref or '')
-      if m:
-        return ('refs/remotes/%s/' % remote, ref.replace(m.group(0), ''))
+      if m := re.match(f'^((refs/)?remotes/)?{remote}/|(refs/)?heads/', ref
+                       or ''):
+        return f'refs/remotes/{remote}/', ref.replace(m[0], '')
     return None
 
   @staticmethod
@@ -378,8 +356,7 @@ class GIT(object):
     """Gets the current branch's upstream branch."""
     remote, upstream_branch = GIT.FetchUpstreamTuple(cwd)
     if remote != '.' and upstream_branch:
-      remote_ref = GIT.RefToRemoteRef(upstream_branch, remote)
-      if remote_ref:
+      if remote_ref := GIT.RefToRemoteRef(upstream_branch, remote):
         upstream_branch = ''.join(remote_ref)
     return upstream_branch
 
@@ -392,8 +369,14 @@ class GIT(object):
     files, usually in the prospect to apply the patch for a try job."""
     if not branch:
       branch = GIT.GetUpstreamBranch(cwd)
-    command = ['diff', '-p', '--no-color', '--no-prefix', '--no-ext-diff',
-               branch + "..." + branch_head]
+    command = [
+        'diff',
+        '-p',
+        '--no-color',
+        '--no-prefix',
+        '--no-ext-diff',
+        f"{branch}...{branch_head}",
+    ]
     if full_move:
       command.append('--no-renames')
     else:
@@ -407,7 +390,7 @@ class GIT(object):
       # In the case of added files, replace /dev/null with the path to the
       # file being added.
       if diff[i].startswith('--- /dev/null'):
-        diff[i] = '--- %s' % diff[i+1][4:]
+        diff[i] = f'--- {diff[i + 1][4:]}'
     return ''.join(diff)
 
   @staticmethod
@@ -415,14 +398,14 @@ class GIT(object):
     """Returns the list of modified files between two branches."""
     if not branch:
       branch = GIT.GetUpstreamBranch(cwd)
-    command = ['diff', '--name-only', branch + "..." + branch_head]
+    command = ['diff', '--name-only', f"{branch}...{branch_head}"]
     return GIT.Capture(command, cwd=cwd).splitlines(False)
 
   @staticmethod
   def GetPatchName(cwd):
     """Constructs a name for this patch."""
     short_sha = GIT.Capture(['rev-parse', '--short=4', 'HEAD'], cwd=cwd)
-    return "%s#%s" % (GIT.GetBranch(cwd), short_sha)
+    return f"{GIT.GetBranch(cwd)}#{short_sha}"
 
   @staticmethod
   def GetCheckoutRoot(cwd):
@@ -458,7 +441,7 @@ class GIT(object):
     try:
       output = GIT.Capture(['svn', 'info'], cwd=cwd)
       match = re.search(r'^Revision: ([0-9]+)$', output, re.MULTILINE)
-      return int(match.group(1)) if match else None
+      return int(match[1]) if match else None
     except (subprocess2.CalledProcessError, ValueError):
       return None
 
@@ -466,7 +449,7 @@ class GIT(object):
   def ParseGitSvnSha1(output):
     """Parses git-svn output for the first sha1."""
     match = re.search(r'[0-9a-fA-F]{40}', output)
-    return match.group(0) if match else None
+    return match[0] if match else None
 
   @staticmethod
   def GetSha1ForSvnRev(cwd, rev):
@@ -474,7 +457,7 @@ class GIT(object):
     if not GIT.IsGitSvn(cwd=cwd):
       return None
     try:
-      output = GIT.Capture(['svn', 'find-rev', 'r' + str(rev)], cwd=cwd)
+      output = GIT.Capture(['svn', 'find-rev', f'r{str(rev)}'], cwd=cwd)
       return GIT.ParseGitSvnSha1(output)
     except subprocess2.CalledProcessError:
       return None
@@ -492,15 +475,22 @@ class GIT(object):
       return None
     try:
       output = GIT.Capture(
-          ['rev-list', '--ancestry-path', '--reverse',
-          '--grep', 'SVN changes up to revision [0-9]*',
-          '%s..refs/remotes/origin/master' % git_svn_rev], cwd=cwd)
+          [
+              'rev-list',
+              '--ancestry-path',
+              '--reverse',
+              '--grep',
+              'SVN changes up to revision [0-9]*',
+              f'{git_svn_rev}..refs/remotes/origin/master',
+          ],
+          cwd=cwd,
+      )
       if not output:
         return None
       sha1 = output.splitlines()[0]
       if not sha1:
         return None
-      output = GIT.Capture(['rev-list', '-n', '1', '%s^1' % sha1], cwd=cwd)
+      output = GIT.Capture(['rev-list', '-n', '1', f'{sha1}^1'], cwd=cwd)
       if git_svn_rev != output.rstrip():
         raise gclient_utils.Error(sha1)
       return sha1
@@ -525,9 +515,7 @@ class GIT(object):
       if lookup_rev != rev:
         # Make sure we get the original 40 chars back.
         return rev.lower() == sha
-      if sha_only:
-        return sha.startswith(rev.lower())
-      return True
+      return sha.startswith(rev.lower()) if sha_only else True
     except subprocess2.CalledProcessError:
       return False
 
@@ -537,7 +525,7 @@ class GIT(object):
     if cls.current_version is None:
       current_version = cls.Capture(['--version'], '.')
       matched = re.search(r'version ([0-9\.]+)', current_version)
-      cls.current_version = matched.group(1)
+      cls.current_version = matched[1]
     current_version_list = map(only_int, cls.current_version.split('.'))
     for min_ver in map(int, min_version.split('.')):
       ver = current_version_list.pop(0)
@@ -725,7 +713,7 @@ class SVN(object):
       result['Schedule'] = None
       result['Copied From URL'] = None
       result['Copied From Rev'] = None
-    for key in result.keys():
+    for key in result:
       if isinstance(result[key], unicode):
         # Unicode results interferes with the higher layers matching up things
         # in the deps dictionary.
@@ -795,21 +783,17 @@ class SVN(object):
           statuses[0] = status_letter[xml_item_status]
         else:
           raise gclient_utils.Error(
-              'Unknown item status "%s"; please implement me!' %
-                  xml_item_status)
+              f'Unknown item status "{xml_item_status}"; please implement me!')
         # Col 1
         xml_props_status = wc_status.attrib['props']
         if xml_props_status == 'modified':
           statuses[1] = 'M'
         elif xml_props_status == 'conflicted':
           statuses[1] = 'C'
-        elif (not xml_props_status or xml_props_status == 'none' or
-              xml_props_status == 'normal'):
-          pass
-        else:
+        elif (xml_props_status and xml_props_status != 'none'
+              and xml_props_status != 'normal'):
           raise gclient_utils.Error(
-              'Unknown props status "%s"; please implement me!' %
-                  xml_props_status)
+              f'Unknown props status "{xml_props_status}"; please implement me!')
         # Col 2
         if wc_status.attrib.get('wc-locked') == 'true':
           statuses[2] = 'L'
@@ -865,31 +849,27 @@ class SVN(object):
     The diff will always use relative paths.
     """
     assert isinstance(filenames, (list, tuple))
-    # If the user specified a custom diff command in their svn config file,
-    # then it'll be used when we do svn diff, which we don't want to happen
-    # since we want the unified diff.
     if SVN.AssertVersion("1.7")[0]:
       # On svn >= 1.7, the "--internal-diff" flag will solve this.
       return SVN._GenerateDiffInternal(filenames, cwd, full_move, revision,
                                        ["diff", "--internal-diff"],
                                        ["diff", "--internal-diff"])
-    else:
-      # On svn < 1.7, the "--internal-diff" flag doesn't exist.  Using
-      # --diff-cmd=diff doesn't always work, since e.g. Windows cmd users may
-      # not have a "diff" executable in their path at all.  So we use an empty
-      # temporary directory as the config directory, which bypasses any user
-      # settings for the diff-cmd.  However, we don't pass this for the
-      # remote_safe_diff_command parameter, since when a new config-dir is
-      # specified for an svn diff against a remote URL, it triggers
-      # authentication prompts.  In this case there isn't really a good
-      # alternative to svn 1.7's --internal-diff flag.
-      bogus_dir = tempfile.mkdtemp()
-      try:
-        return SVN._GenerateDiffInternal(filenames, cwd, full_move, revision,
-                                         ["diff", "--config-dir", bogus_dir],
-                                         ["diff"])
-      finally:
-        gclient_utils.rmtree(bogus_dir)
+    # On svn < 1.7, the "--internal-diff" flag doesn't exist.  Using
+    # --diff-cmd=diff doesn't always work, since e.g. Windows cmd users may
+    # not have a "diff" executable in their path at all.  So we use an empty
+    # temporary directory as the config directory, which bypasses any user
+    # settings for the diff-cmd.  However, we don't pass this for the
+    # remote_safe_diff_command parameter, since when a new config-dir is
+    # specified for an svn diff against a remote URL, it triggers
+    # authentication prompts.  In this case there isn't really a good
+    # alternative to svn 1.7's --internal-diff flag.
+    bogus_dir = tempfile.mkdtemp()
+    try:
+      return SVN._GenerateDiffInternal(filenames, cwd, full_move, revision,
+                                       ["diff", "--config-dir", bogus_dir],
+                                       ["diff"])
+    finally:
+      gclient_utils.rmtree(bogus_dir)
 
   @staticmethod
   def _GenerateDiffInternal(filenames, cwd, full_move, revision, diff_command,
@@ -995,25 +975,21 @@ class SVN(object):
             data = tmp
         else:
           data = GenFakeDiff(filename)
-      else:
-        if info.get("Node Kind") != "directory":
-          # svn diff on a mv/cp'd file outputs nothing if there was no change.
-          data = SVN.Capture(command, cwd)
-          if not data:
-            # We put in an empty Index entry so upload.py knows about them.
-            data = "Index: %s\n" % filename.replace(os.sep, '/')
-        # Otherwise silently ignore directories.
-    else:
-      if info.get("Node Kind") != "directory":
-        # Normal simple case.
-        try:
-          data = SVN.Capture(command, cwd)
-        except subprocess2.CalledProcessError:
-          if revision:
-            data = GenFakeDiff(filename)
-          else:
-            raise
-      # Otherwise silently ignore directories.
+      elif info.get("Node Kind") != "directory":
+        # svn diff on a mv/cp'd file outputs nothing if there was no change.
+        data = SVN.Capture(command, cwd)
+        if not data:
+          # We put in an empty Index entry so upload.py knows about them.
+          data = "Index: %s\n" % filename.replace(os.sep, '/')
+    elif info.get("Node Kind") != "directory":
+      # Normal simple case.
+      try:
+        data = SVN.Capture(command, cwd)
+      except subprocess2.CalledProcessError:
+        if revision:
+          data = GenFakeDiff(filename)
+        else:
+          raise
     return data
 
   @staticmethod
@@ -1035,15 +1011,15 @@ class SVN(object):
     if regexp is None:
       return None
     if sys.platform.startswith('win'):
-      if not 'APPDATA' in os.environ:
+      if 'APPDATA' not in os.environ:
         return None
       auth_dir = os.path.join(os.environ['APPDATA'], 'Subversion', 'auth',
                               'svn.simple')
-    else:
-      if not 'HOME' in os.environ:
-        return None
+    elif 'HOME' in os.environ:
       auth_dir = os.path.join(os.environ['HOME'], '.subversion', 'auth',
                               'svn.simple')
+    else:
+      return None
     for credfile in os.listdir(auth_dir):
       cred_info = SVN.ReadSimpleAuth(os.path.join(auth_dir, credfile))
       if regexp.match(cred_info.get('svn:realmstring')):
@@ -1057,10 +1033,8 @@ class SVN(object):
       m = re.match(r'%s (\d+)' % item_type, f.readline())
       if not m:
         return None
-      data = f.read(int(m.group(1)))
-      if f.read(1) != '\n':
-        return None
-      return data
+      data = f.read(int(m[1]))
+      return None if f.read(1) != '\n' else data
 
     while True:
       key = ReadOneItem('K')
@@ -1136,12 +1110,12 @@ class SVN(object):
           file_status[0][0] == 'X' and
           file_status[0][1:].isspace()):
         # Ignore externals.
-        logging.info('Ignoring external %s' % file_status[1])
+        logging.info(f'Ignoring external {file_status[1]}')
         continue
 
       # This is the case where '! L    .' is returned by 'svn status'. Just
       # strip off the '/.'.
-      if file_path.endswith(os.path.sep + '.'):
+      if file_path.endswith(f'{os.path.sep}.'):
         file_path = file_path[:-2]
 
       if callback:
@@ -1154,10 +1128,10 @@ class SVN(object):
         # it'd have to look for switched directories, etc so it's not worth
         # optimizing this use case.
         if os.path.isfile(file_path) or os.path.islink(file_path):
-          logging.info('os.remove(%s)' % file_path)
+          logging.info(f'os.remove({file_path})')
           os.remove(file_path)
         elif os.path.isdir(file_path):
-          logging.info('rmtree(%s)' % file_path)
+          logging.info(f'rmtree({file_path})')
           gclient_utils.rmtree(file_path)
         else:
           logging.critical(

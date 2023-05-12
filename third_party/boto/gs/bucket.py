@@ -92,11 +92,12 @@ class Bucket(S3Bucket):
         """
         query_args_l = []
         if generation:
-            query_args_l.append('generation=%s' % generation)
+            query_args_l.append(f'generation={generation}')
         if response_headers:
-            for rk, rv in response_headers.iteritems():
-                query_args_l.append('%s=%s' % (rk, urllib.quote(rv)))
-
+            query_args_l.extend(
+                f'{rk}={urllib.quote(rv)}'
+                for rk, rv in response_headers.iteritems()
+            )
         key, resp = self._get_key_internal(key_name, headers,
                                            query_args_l=query_args_l)
         return key
@@ -235,7 +236,7 @@ class Bucket(S3Bucket):
         """
         query_args_l = []
         if generation:
-            query_args_l.append('generation=%s' % generation)
+            query_args_l.append(f'generation={generation}')
         self._delete_key_internal(key_name, headers=headers,
                                   version_id=version_id, mfa_token=mfa_token,
                                   query_args_l=query_args_l)
@@ -342,7 +343,7 @@ class Bucket(S3Bucket):
         """
         query_args = STANDARD_ACL
         if generation:
-            query_args += '&generation=%s' % generation
+            query_args += f'&generation={generation}'
         return self._get_acl_helper(key_name, headers, query_args)
 
     def get_xml_acl(self, key_name='', headers=None, version_id=None,
@@ -366,7 +367,7 @@ class Bucket(S3Bucket):
         """
         query_args = STANDARD_ACL
         if generation:
-            query_args += '&generation=%s' % generation
+            query_args += f'&generation={generation}'
         return self._get_xml_acl_helper(key_name, headers, query_args)
 
     def get_def_acl(self, headers=None):
@@ -393,7 +394,7 @@ class Bucket(S3Bucket):
             data = acl_or_str.encode('UTF-8')
 
         if generation:
-            query_args += '&generation=%s' % generation
+            query_args += f'&generation={generation}'
 
         if if_metageneration is not None and if_generation is None:
             raise ValueError("Received if_metageneration argument with no "
@@ -489,8 +490,7 @@ class Bucket(S3Bucket):
             this value.
         """
         if acl_str not in CannedACLStrings:
-            raise ValueError("Provided canned ACL string (%s) is not valid."
-                             % acl_str)
+            raise ValueError(f"Provided canned ACL string ({acl_str}) is not valid.")
         query_args = STANDARD_ACL
         return self._set_acl_helper(acl_str, key_name, headers, query_args,
                                     generation, if_generation,
@@ -507,8 +507,7 @@ class Bucket(S3Bucket):
         :param headers: Additional headers to set during the request.
         """
         if acl_str not in CannedACLStrings:
-            raise ValueError("Provided canned ACL string (%s) is not valid."
-                             % acl_str)
+            raise ValueError(f"Provided canned ACL string ({acl_str}) is not valid.")
         query_args = DEF_OBJ_ACL
         return self._set_acl_helper(acl_str, '', headers, query_args,
                                     generation=None, if_generation=None,
@@ -536,15 +535,14 @@ class Bucket(S3Bucket):
                                                 query_args=CORS_ARG,
                                                 headers=headers)
         body = response.read()
-        if response.status == 200:
-            # Success - parse XML and return Cors object.
-            cors = Cors()
-            h = handler.XmlHandler(cors, self)
-            xml.sax.parseString(body, h)
-            return cors
-        else:
+        if response.status != 200:
             raise self.connection.provider.storage_response_error(
                 response.status, response.reason, body)
+        # Success - parse XML and return Cors object.
+        cors = Cors()
+        h = handler.XmlHandler(cors, self)
+        xml.sax.parseString(body, h)
+        return cors
 
     def set_cors(self, cors, headers=None):
         """Sets a bucket's CORS XML document.
@@ -572,14 +570,13 @@ class Bucket(S3Bucket):
         response = self.connection.make_request('GET', self.name,
                                                 query_args='storageClass')
         body = response.read()
-        if response.status == 200:
-            rs = ResultSet(self)
-            h = handler.XmlHandler(rs, self)
-            xml.sax.parseString(body, h)
-            return rs.StorageClass
-        else:
+        if response.status != 200:
             raise self.connection.provider.storage_response_error(
                 response.status, response.reason, body)
+        rs = ResultSet(self)
+        h = handler.XmlHandler(rs, self)
+        xml.sax.parseString(body, h)
+        return rs.StorageClass
 
 
     # Method with same signature as boto.s3.bucket.Bucket.add_email_grant(),
@@ -611,7 +608,8 @@ class Bucket(S3Bucket):
         """
         if permission not in GSPermissions:
             raise self.connection.provider.storage_permissions_error(
-                'Unknown Permission: %s' % permission)
+                f'Unknown Permission: {permission}'
+            )
         acl = self.get_acl(headers=headers)
         acl.add_email_grant(permission, email_address)
         self.set_acl(acl, headers=headers)
@@ -648,7 +646,8 @@ class Bucket(S3Bucket):
         """
         if permission not in GSPermissions:
             raise self.connection.provider.storage_permissions_error(
-                'Unknown Permission: %s' % permission)
+                f'Unknown Permission: {permission}'
+            )
         acl = self.get_acl(headers=headers)
         acl.add_user_grant(permission, user_id)
         self.set_acl(acl, headers=headers)
@@ -685,7 +684,8 @@ class Bucket(S3Bucket):
         """
         if permission not in GSPermissions:
             raise self.connection.provider.storage_permissions_error(
-                'Unknown Permission: %s' % permission)
+                f'Unknown Permission: {permission}'
+            )
         acl = self.get_acl(headers=headers)
         acl.add_group_email_grant(permission, email_address)
         self.set_acl(acl, headers=headers)
@@ -729,11 +729,10 @@ class Bucket(S3Bucket):
         if isinstance(target_bucket, Bucket):
             target_bucket = target_bucket.name
         xml_str = '<?xml version="1.0" encoding="UTF-8"?><Logging>'
-        xml_str = (xml_str + '<LogBucket>%s</LogBucket>' % target_bucket)
+        xml_str += f'<LogBucket>{target_bucket}</LogBucket>'
         if target_prefix:
-            xml_str = (xml_str +
-                       '<LogObjectPrefix>%s</LogObjectPrefix>' % target_prefix)
-        xml_str = xml_str + '</Logging>'
+            xml_str += f'<LogObjectPrefix>{target_prefix}</LogObjectPrefix>'
+        xml_str += '</Logging>'
 
         self.set_subresource('logging', xml_str, headers=headers)
 
@@ -761,11 +760,7 @@ class Bucket(S3Bucket):
         else:
             main_page_frag = ''
 
-        if error_key:
-            error_frag = self.WebsiteErrorFragment % error_key
-        else:
-            error_frag = ''
-
+        error_frag = self.WebsiteErrorFragment % error_key if error_key else ''
         body = self.WebsiteBody % (main_page_frag, error_frag)
         response = self.connection.make_request('PUT', self.name, data=body,
                                                 query_args='websiteConfig',

@@ -37,8 +37,7 @@ TIMESTAMP_RE = re.compile('\[[0-9]{1,2}:[0-9]{2}:[0-9]{2}\] (.*)', re.DOTALL)
 def strip_timestamps(value):
   lines = value.splitlines(True)
   for i in xrange(len(lines)):
-    m = TIMESTAMP_RE.match(lines[i])
-    if m:
+    if m := TIMESTAMP_RE.match(lines[i]):
       lines[i] = m.group(1)
   return ''.join(lines)
 
@@ -186,7 +185,7 @@ class SVNWrapperTestCase(BaseTestCase):
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
                             relpath=self.relpath)
-    exception = "Unsupported argument(s): %s" % ','.join(self.args)
+    exception = f"Unsupported argument(s): {','.join(self.args)}"
     self.assertRaisesError(exception, scm.RunCommand,
                            'update', options, self.args)
 
@@ -215,8 +214,8 @@ class SVNWrapperTestCase(BaseTestCase):
         cwd=self.root_dir,
         file_list=files_list)
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -247,8 +246,8 @@ class SVNWrapperTestCase(BaseTestCase):
         cwd=self.root_dir,
         file_list=files_list)
     gclient_scm.gclient_utils.rmtree(self.base_path)
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
                             relpath=self.relpath)
@@ -372,8 +371,8 @@ class SVNWrapperTestCase(BaseTestCase):
         ['checkout', self.url, self.base_path, '--force', '--ignore-externals'],
         cwd=self.root_dir,
         file_list=files_list)
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
                             relpath=self.relpath)
@@ -409,8 +408,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.SVN.Capture(['--version', '--quiet'], None
         ).AndReturn('1.5.1')
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     additional_args = []
     if options.manually_grab_svn_rev:
@@ -452,8 +451,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.SVN._CaptureInfo([file_info['URL']], None
         ).AndReturn(file_info)
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     files_list = []
@@ -497,8 +496,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.os.path.islink(join(self.base_path, 'dir')).AndReturn(False)
     gclient_scm.gclient_utils.rmtree(join(self.base_path, 'dir'))
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -548,8 +547,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.SVN._CaptureInfo([file_info['URL']], None
         ).AndReturn(file_info)
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -620,8 +619,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.SVN._CaptureInfo([file_info['URL']], None
         ).AndReturn(file_info)
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -657,8 +656,8 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.SVN._CaptureInfo([file_info['URL']], None
         ).AndReturn(file_info)
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -675,13 +674,12 @@ class SVNWrapperTestCase(BaseTestCase):
     gclient_scm.scm.GIT.IsGitSvn(self.base_path).AndReturn(False)
     error = gclient_scm.subprocess2.CalledProcessError(
         1, 'cmd', '/cwd', 'stdout', 'stderr')
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.').AndRaise(error)
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndRaise(error)
 
     bad_scm_path = os.path.join(self.root_dir, '_bad_scm',
                                 os.path.dirname(self.relpath))
     gclient_scm.os.makedirs(bad_scm_path)
-    dest_path = os.path.join(bad_scm_path,
-                             os.path.basename(self.relpath) + 'ABCD')
+    dest_path = os.path.join(bad_scm_path, f'{os.path.basename(self.relpath)}ABCD')
     self.mox.StubOutWithMock(gclient_scm.tempfile, 'mkdtemp', True)
     gclient_scm.tempfile.mkdtemp(
         prefix=os.path.basename(self.relpath),
@@ -698,8 +696,8 @@ class SVNWrapperTestCase(BaseTestCase):
         cwd=self.root_dir,
         file_list=[])
 
-    gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-        ).AndReturn({'Revision': 100})
+    gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+        {'Revision': 100})
 
     self.mox.ReplayAll()
     scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -720,7 +718,7 @@ class SVNWrapperTestCase(BaseTestCase):
       gclient_scm.scm.GIT.IsGitSvn(self.base_path).AndReturn(False)
       error = gclient_scm.subprocess2.CalledProcessError(
           1, 'cmd', '/cwd', 'stdout', 'stderr')
-      gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.').AndRaise(error)
+      gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndRaise(error)
       gclient_scm.gclient_utils.rmtree(self.base_path)
       gclient_scm.os.path.exists(self.root_dir).AndReturn(True)
       gclient_scm.scm.SVN.Capture(['--version', '--quiet'], None
@@ -732,8 +730,8 @@ class SVNWrapperTestCase(BaseTestCase):
           cwd=self.root_dir,
           file_list=[])
 
-      gclient_scm.scm.SVN._CaptureInfo([], self.base_path+'/.'
-          ).AndReturn({'Revision': 100})
+      gclient_scm.scm.SVN._CaptureInfo([], f'{self.base_path}/.').AndReturn(
+          {'Revision': 100})
 
       self.mox.ReplayAll()
       scm = self._scm_wrapper(url=self.url, root_dir=self.root_dir,
@@ -785,10 +783,8 @@ class SVNWrapperTestCase(BaseTestCase):
     # Mock SVN revision validity checking.
     self.mox.StubOutWithMock(
         gclient_scm.scm.SVN, 'IsValidRevision', True)
-    gclient_scm.scm.SVN.IsValidRevision(url='%s@%s' % (self.url, 1)
-        ).AndReturn(True)
-    gclient_scm.scm.SVN.IsValidRevision(url='%s@%s' % (self.url, 'fake')
-        ).AndReturn(False)
+    gclient_scm.scm.SVN.IsValidRevision(url=f'{self.url}@1').AndReturn(True)
+    gclient_scm.scm.SVN.IsValidRevision(url=f'{self.url}@fake').AndReturn(False)
 
     self.mox.ReplayAll()
 
@@ -1012,9 +1008,8 @@ class ManagedGitWrapperTestCase(BaseGitWrapperTestCase):
     file_list = []
     scm.update(options, None, file_list)
     file_path = join(self.base_path, 'c')
-    f = open(file_path, 'w')
-    f.writelines('new\n')
-    f.close()
+    with open(file_path, 'w') as f:
+      f.writelines('new\n')
     Popen(['git', 'add', 'c'], stdout=PIPE,
           stderr=STDOUT, cwd=self.base_path).communicate()
     file_list = []
@@ -1246,8 +1241,7 @@ class ManagedGitWrapperTestCaseMox(BaseTestCase):
     self.root_dir = '/tmp' if sys.platform != 'win32' else 't:\\tmp'
     self.relpath = 'fake'
     self.base_path = os.path.join(self.root_dir, self.relpath)
-    self.backup_base_path = os.path.join(self.root_dir,
-                                         'old_%s.git' % self.relpath)
+    self.backup_base_path = os.path.join(self.root_dir, f'old_{self.relpath}.git')
 
   def tearDown(self):
     BaseTestCase.tearDown(self)
@@ -1438,9 +1432,7 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
     # Returns name of current branch or HEAD for detached HEAD
     branch = gclient_scm.scm.GIT.Capture(['rev-parse', '--abbrev-ref', 'HEAD'],
                                           cwd=self.base_path)
-    if branch == 'HEAD':
-      return None
-    return branch
+    return None if branch == 'HEAD' else branch
 
   def testUpdateClone(self):
     if not self.enabled:
@@ -1481,8 +1473,8 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
     self.root_dir = tempfile.mkdtemp()
     self.relpath = '.'
     self.base_path = join(self.root_dir, self.relpath)
-    url_with_commit_ref = origin_root_dir +\
-                          '@a7142dc9f0009350b96a11f372b6ea658592aa95'
+    url_with_commit_ref = (
+        f'{origin_root_dir}@a7142dc9f0009350b96a11f372b6ea658592aa95')
 
     scm = gclient_scm.CreateSCM(url=url_with_commit_ref,
                                 root_dir=self.root_dir,
@@ -1490,8 +1482,8 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
 
     expected_file_list = [join(self.base_path, "a"),
                           join(self.base_path, "b")]
-    file_list = []
     options.revision = 'unmanaged'
+    file_list = []
     scm.update(options, (), file_list)
 
     self.assertEquals(file_list, expected_file_list)
@@ -1513,7 +1505,7 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
     self.root_dir = tempfile.mkdtemp()
     self.relpath = '.'
     self.base_path = join(self.root_dir, self.relpath)
-    url_with_branch_ref = origin_root_dir + '@feature'
+    url_with_branch_ref = f'{origin_root_dir}@feature'
 
     scm = gclient_scm.CreateSCM(url=url_with_branch_ref,
                                 root_dir=self.root_dir,
@@ -1543,7 +1535,7 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
     self.root_dir = tempfile.mkdtemp()
     self.relpath = '.'
     self.base_path = join(self.root_dir, self.relpath)
-    url_with_branch_ref = origin_root_dir + '@refs/remotes/origin/feature'
+    url_with_branch_ref = f'{origin_root_dir}@refs/remotes/origin/feature'
 
     scm = gclient_scm.CreateSCM(url=url_with_branch_ref,
                                 root_dir=self.root_dir,
@@ -1575,7 +1567,7 @@ class UnmanagedGitWrapperTestCase(BaseGitWrapperTestCase):
     self.root_dir = tempfile.mkdtemp()
     self.relpath = '.'
     self.base_path = join(self.root_dir, self.relpath)
-    url_with_branch_ref = origin_root_dir + '@refs/heads/feature'
+    url_with_branch_ref = f'{origin_root_dir}@refs/heads/feature'
 
     scm = gclient_scm.CreateSCM(url=url_with_branch_ref,
                                 root_dir=self.root_dir,

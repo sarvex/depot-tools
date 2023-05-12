@@ -40,7 +40,7 @@ FREEZE_SECTIONS = {
   'indexed': 'soft',
   'unindexed': 'mixed'
 }
-FREEZE_MATCHER = re.compile(r'%s.(%s)' % (FREEZE, '|'.join(FREEZE_SECTIONS)))
+FREEZE_MATCHER = re.compile(f"{FREEZE}.({'|'.join(FREEZE_SECTIONS)})")
 
 
 # Retry a git operation if git returns a error response with any of these
@@ -98,8 +98,7 @@ MIN_UPSTREAM_TRACK_GIT_VERSION = (1, 9)
 
 class BadCommitRefException(Exception):
   def __init__(self, refs):
-    msg = ('one of %s does not seem to be a valid commitref.' %
-           str(refs))
+    msg = f'one of {str(refs)} does not seem to be a valid commitref.'
     super(BadCommitRefException, self).__init__(msg)
 
 
@@ -279,7 +278,7 @@ def once(function):
 
 
 def branch_config(branch, option, default=None):
-  return config('branch.%s.%s' % (branch, option), default=default)
+  return config(f'branch.{branch}.{option}', default=default)
 
 
 def branch_config_map(option):
@@ -287,7 +286,7 @@ def branch_config_map(option):
   try:
     reg = re.compile(r'^branch\.(.*)\.%s$' % option)
     lines = run('config', '--get-regexp', reg.pattern).splitlines()
-    return {reg.match(k).group(1): v for k, v in (l.split() for l in lines)}
+    return {reg.match(k)[1]: v for k, v in (l.split() for l in lines)}
   except subprocess2.CalledProcessError:
     return {}
 
@@ -342,32 +341,24 @@ def current_branch():
 
 
 def del_branch_config(branch, option, scope='local'):
-  del_config('branch.%s.%s' % (branch, option), scope=scope)
+  del_config(f'branch.{branch}.{option}', scope=scope)
 
 
 def del_config(option, scope='local'):
-  try:
-    run('config', '--' + scope, '--unset', option)
-  except subprocess2.CalledProcessError:
-    pass
+  with contextlib.suppress(subprocess2.CalledProcessError):
+    run('config', f'--{scope}', '--unset', option)
 
 
 def freeze():
   took_action = False
 
-  try:
-    run('commit', '-m', FREEZE + '.indexed')
+  with contextlib.suppress(subprocess2.CalledProcessError):
+    run('commit', '-m', f'{FREEZE}.indexed')
     took_action = True
-  except subprocess2.CalledProcessError:
-    pass
-
-  try:
+  with contextlib.suppress(subprocess2.CalledProcessError):
     run('add', '-A')
-    run('commit', '-m', FREEZE + '.unindexed')
+    run('commit', '-m', f'{FREEZE}.unindexed')
     took_action = True
-  except subprocess2.CalledProcessError:
-    pass
-
   if not took_action:
     return 'Nothing to freeze.'
 
@@ -595,11 +586,11 @@ def run_with_stderr(*cmd, **kwargs):
 
 
 def set_branch_config(branch, option, value, scope='local'):
-  set_config('branch.%s.%s' % (branch, option), value, scope=scope)
+  set_config(f'branch.{branch}.{option}', value, scope=scope)
 
 
 def set_config(option, value, scope='local'):
-  run('config', '--' + scope, option, value)
+  run('config', f'--{scope}', option, value)
 
 
 def squash_current_branch(header=None, merge_base=None):
@@ -608,7 +599,7 @@ def squash_current_branch(header=None, merge_base=None):
   log_msg = header + '\n'
   if log_msg:
     log_msg += '\n'
-  log_msg += run('log', '--reverse', '--format=%H%n%B', '%s..HEAD' % merge_base)
+  log_msg += run('log', '--reverse', '--format=%H%n%B', f'{merge_base}..HEAD')
   run('reset', '--soft', merge_base)
   run('commit', '-a', '-F', '-', indata=log_msg)
 
@@ -627,7 +618,7 @@ def thaw():
         return 'Nothing to thaw.'
       break
 
-    run('reset', '--' + FREEZE_SECTIONS[match.group(1)], sha)
+    run('reset', f'--{FREEZE_SECTIONS[match.group(1)]}', sha)
     took_action = True
 
 
@@ -753,10 +744,10 @@ def get_branches_info(include_tracking_status):
     (branch, branch_hash, upstream_branch, tracking_status) = line.split(':')
 
     ahead_match = re.search(r'ahead (\d+)', tracking_status)
-    ahead = int(ahead_match.group(1)) if ahead_match else None
+    ahead = int(ahead_match[1]) if ahead_match else None
 
     behind_match = re.search(r'behind (\d+)', tracking_status)
-    behind = int(behind_match.group(1)) if behind_match else None
+    behind = int(behind_match[1]) if behind_match else None
 
     info_map[branch] = BranchesInfo(
         hash=branch_hash, upstream=upstream_branch, ahead=ahead, behind=behind)

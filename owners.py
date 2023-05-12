@@ -116,7 +116,7 @@ class Database(object):
 
     # Set of paths that stop us from looking above them for owners.
     # (This is implicitly true for the root directory).
-    self.stop_looking = set([''])
+    self.stop_looking = {''}
 
   def reviewers_for(self, files, author):
     """Returns a suggested set of reviewers that will cover the files.
@@ -131,7 +131,7 @@ class Database(object):
       if len(suggested_owners) > 1:
         suggested_owners.remove(EVERYONE)
       else:
-        suggested_owners = set(['<anyone>'])
+        suggested_owners = {'<anyone>'}
     return suggested_owners
 
   def files_not_covered_by(self, files, reviewers):
@@ -172,14 +172,14 @@ class Database(object):
     return objname in self.stop_looking
 
   def _is_obj_covered_by(self, objname, covered_objs):
-    while not objname in covered_objs and not self._stop_looking(objname):
+    while objname not in covered_objs and not self._stop_looking(objname):
       objname = self.os_path.dirname(objname)
     return objname in covered_objs
 
   def _enclosing_dir_with_owners(self, objname):
     """Returns the innermost enclosing directory that has an OWNERS file."""
     dirpath = objname
-    while not dirpath in self.owners_for:
+    while dirpath not in self.owners_for:
       if self._stop_looking(dirpath):
         break
       dirpath = self.os_path.dirname(dirpath)
@@ -188,7 +188,7 @@ class Database(object):
   def load_data_needed_for(self, files):
     for f in files:
       dirpath = self.os_path.dirname(f)
-      while not dirpath in self.owners_for:
+      while dirpath not in self.owners_for:
         self._read_owners_in_dir(dirpath)
         if self._stop_looking(dirpath):
           break
@@ -218,15 +218,16 @@ class Database(object):
         self.stop_looking.add(dirpath)
         continue
 
-      m = re.match('per-file (.+)=(.+)', line)
-      if m:
-        glob_string = m.group(1).strip()
-        directive = m.group(2).strip()
+      if m := re.match('per-file (.+)=(.+)', line):
+        glob_string = m[1].strip()
+        directive = m[2].strip()
         full_glob_string = self.os_path.join(self.root, dirpath, glob_string)
         if '/' in glob_string or '\\' in glob_string:
-          raise SyntaxErrorInOwnersFile(owners_path, lineno,
-              'per-file globs cannot span directories or use escapes: "%s"' %
-              line)
+          raise SyntaxErrorInOwnersFile(
+              owners_path,
+              lineno,
+              f'per-file globs cannot span directories or use escapes: "{line}"',
+          )
         baselines = self.glob(full_glob_string)
         for baseline in (self.os_path.relpath(b, self.root) for b in baselines):
           self._add_entry(baseline, directive, 'per-file line',
@@ -235,7 +236,7 @@ class Database(object):
 
       if line.startswith('set '):
         raise SyntaxErrorInOwnersFile(owners_path, lineno,
-            'unknown option: "%s"' % line[4:].strip())
+                                      f'unknown option: "{line[4:].strip()}"')
 
       self._add_entry(dirpath, line, 'line', owners_path, lineno,
                       ' '.join(comment))
@@ -255,13 +256,13 @@ class Database(object):
            'or an email address: "%s"' % (line_type, directive)))
 
   def _covering_set_of_owners_for(self, files, author):
-    dirs_remaining = set(self._enclosing_dir_with_owners(f) for f in files)
+    dirs_remaining = {self._enclosing_dir_with_owners(f) for f in files}
     all_possible_owners = self.all_possible_owners(dirs_remaining, author)
     suggested_owners = set()
     while dirs_remaining:
       owner = self.lowest_cost_owner(all_possible_owners, dirs_remaining)
       suggested_owners.add(owner)
-      dirs_to_remove = set(el[0] for el in all_possible_owners[owner])
+      dirs_to_remove = {el[0] for el in all_possible_owners[owner]}
       dirs_remaining -= dirs_to_remove
     return suggested_owners
 
@@ -280,7 +281,7 @@ class Database(object):
           all_possible_owners.setdefault(owner, [])
           # If the same person is in multiple OWNERS files above a given
           # directory, only count the closest one.
-          if not any(current_dir == el[0] for el in all_possible_owners[owner]):
+          if all(current_dir != el[0] for el in all_possible_owners[owner]):
             all_possible_owners[owner].append((current_dir, distance))
         if self._stop_looking(dirname):
           break

@@ -38,7 +38,7 @@ class Bucket(object):
         return iter(BucketListResultSet(self))
 
     def __str__(self):
-        return 'anonymous bucket for file://' + self.contained_key
+        return f'anonymous bucket for file://{self.contained_key}'
 
     def delete_key(self, key_name, headers=None,
                    version_id=None, mfa_token=None):
@@ -88,9 +88,8 @@ class Bucket(object):
         """
         if key_name == '-':
             return Key(self.name, '-', key_type=Key.KEY_STREAM_READABLE)
-        else:
-            fp = open(key_name, 'rb')
-            return Key(self.name, key_name, fp)
+        fp = open(key_name, 'rb')
+        return Key(self.name, key_name, fp)
 
     def new_key(self, key_name=None, key_type=Key.KEY_REGULAR_FILE):
         """
@@ -104,9 +103,8 @@ class Bucket(object):
         """
         if key_name == '-':
             return Key(self.name, '-', key_type=Key.KEY_STREAM_WRITABLE)
-        else:
-            dir_name = os.path.dirname(key_name)
-            if dir_name and not os.path.exists(dir_name):
-                os.makedirs(dir_name)
-            fp = open(key_name, 'wb')
-            return Key(self.name, key_name, fp)
+        dir_name = os.path.dirname(key_name)
+        if dir_name and not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+        fp = open(key_name, 'wb')
+        return Key(self.name, key_name, fp)

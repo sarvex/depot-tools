@@ -31,17 +31,16 @@ def main(args):
   try:
     if opts.upstream_current:
       run('checkout', '--track', '-b', opts.branch_name)
+    elif opts.upstream in tags():
+      # TODO(iannucci): ensure that basis_ref is an ancestor of HEAD?
+      run('checkout', '--no-track', '-b', opts.branch_name,
+          hash_one(opts.upstream))
+      set_config(f'branch.{opts.branch_name}.remote', '.')
+      set_config(f'branch.{opts.branch_name}.merge', opts.upstream)
     else:
-      if opts.upstream in tags():
-        # TODO(iannucci): ensure that basis_ref is an ancestor of HEAD?
-        run('checkout', '--no-track', '-b', opts.branch_name,
-            hash_one(opts.upstream))
-        set_config('branch.%s.remote' % opts.branch_name, '.')
-        set_config('branch.%s.merge' % opts.branch_name, opts.upstream)
-      else:
-        # TODO(iannucci): Detect unclean workdir then stash+pop if we need to
-        # teleport to a conflicting portion of history?
-        run('checkout', '--track', opts.upstream, '-b', opts.branch_name)
+      # TODO(iannucci): Detect unclean workdir then stash+pop if we need to
+      # teleport to a conflicting portion of history?
+      run('checkout', '--track', opts.upstream, '-b', opts.branch_name)
     get_or_create_merge_base(opts.branch_name)
   except subprocess2.CalledProcessError as cpe:
     sys.stdout.write(cpe.stdout)

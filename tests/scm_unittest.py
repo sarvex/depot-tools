@@ -146,28 +146,21 @@ class GitWrapperTestCase(BaseSCMTestCase):
         }
     for k, v in refs.items():
       r = scm.GIT.RefToRemoteRef(k)
-      self.assertEqual(r, v, msg='%s -> %s, expected %s' % (k, r, v))
+      self.assertEqual(r, v, msg=f'{k} -> {r}, expected {v}')
 
   def testRefToRemoteRefWithRemote(self):
     remote = 'origin'
     refs = {
-        # This shouldn't be any different from the NoRemote() version.
         'refs/branch-heads/1234': ('refs/remotes/branch-heads/', '1234'),
-        # local refs for upstream branch
-        'refs/remotes/%s/foobar' % remote: ('refs/remotes/%s/' % remote,
-                                            'foobar'),
-        '%s/foobar' % remote: ('refs/remotes/%s/' % remote, 'foobar'),
-        # upstream ref for branch
-        'refs/heads/foobar': ('refs/remotes/%s/' % remote, 'foobar'),
-        # could be either local or upstream ref, assumed to refer to
-        # upstream, but probably don't want to encourage refs like this.
-        'heads/foobar': ('refs/remotes/%s/' % remote, 'foobar'),
-        # underspecified, probably intended to refer to a local branch
+        f'refs/remotes/{remote}/foobar': (f'refs/remotes/{remote}/', 'foobar'),
+        f'{remote}/foobar': (f'refs/remotes/{remote}/', 'foobar'),
+        'refs/heads/foobar': (f'refs/remotes/{remote}/', 'foobar'),
+        'heads/foobar': (f'refs/remotes/{remote}/', 'foobar'),
         'foobar': None,
-        }
+    }
     for k, v in refs.items():
       r = scm.GIT.RefToRemoteRef(k, remote)
-      self.assertEqual(r, v, msg='%s -> %s, expected %s' % (k, r, v))
+      self.assertEqual(r, v, msg=f'{k} -> {r}, expected {v}')
 
 
 class RealGitTest(fake_repos.FakeReposTestBase):
@@ -287,21 +280,27 @@ class SVNTestCase(BaseSCMTestCase):
     self.mox.StubOutWithMock(scm, 'GetCasedPath')
     scm.os.path.abspath = lambda x: x
     scm.GetCasedPath = lambda x: x
-    scm.SVN._CaptureInfo([], self.root_dir + '/foo/bar').AndReturn({
-        'Repository Root': 'svn://svn.chromium.org/chrome',
-        'URL': 'svn://svn.chromium.org/chrome/trunk/src',
+    scm.SVN._CaptureInfo([], f'{self.root_dir}/foo/bar').AndReturn({
+        'Repository Root':
+        'svn://svn.chromium.org/chrome',
+        'URL':
+        'svn://svn.chromium.org/chrome/trunk/src',
     })
-    scm.SVN._CaptureInfo([], self.root_dir + '/foo').AndReturn({
-        'Repository Root': 'svn://svn.chromium.org/chrome',
-        'URL': 'svn://svn.chromium.org/chrome/trunk',
+    scm.SVN._CaptureInfo([], f'{self.root_dir}/foo').AndReturn({
+        'Repository Root':
+        'svn://svn.chromium.org/chrome',
+        'URL':
+        'svn://svn.chromium.org/chrome/trunk',
     })
     scm.SVN._CaptureInfo([], self.root_dir).AndReturn({
         'Repository Root': 'svn://svn.chromium.org/chrome',
         'URL': 'svn://svn.chromium.org/chrome/trunk/tools/commit-queue/workdir',
     })
     self.mox.ReplayAll()
-    self.assertEquals(scm.SVN.GetCheckoutRoot(self.root_dir + '/foo/bar'),
-                      self.root_dir + '/foo')
+    self.assertEquals(
+        scm.SVN.GetCheckoutRoot(f'{self.root_dir}/foo/bar'),
+        f'{self.root_dir}/foo',
+    )
 
   def testGetFileInfo(self):
     xml_text = r"""<?xml version="1.0"?>
@@ -448,8 +447,9 @@ class RealSvnTest(fake_repos.FakeReposTestBase):
     if self.enabled:
       self.svn_root = scm.os.path.join(self.root_dir, 'base')
       scm.SVN.Capture(
-          ['checkout', self.svn_base + 'trunk/third_party', 'base'],
-          cwd=self.root_dir)
+          ['checkout', f'{self.svn_base}trunk/third_party', 'base'],
+          cwd=self.root_dir,
+      )
       self.tree = self.mangle_svn_tree(('trunk/third_party@-1', ''),)
 
   def _capture(self, cmd, **kwargs):
@@ -465,7 +465,7 @@ class RealSvnTest(fake_repos.FakeReposTestBase):
   def testIsValidRevision(self):
     if not self.enabled:
       return
-    url_at_rev = self.svn_base + 'trunk/third_party@%s'
+    url_at_rev = f'{self.svn_base}trunk/third_party@%s'
     # Invalid or non-existent.
     self.assertFalse(scm.SVN.IsValidRevision('url://totally_invalid/trunk/foo'))
     self.assertFalse(scm.SVN.IsValidRevision(url_at_rev % 0))

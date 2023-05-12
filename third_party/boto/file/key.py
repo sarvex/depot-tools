@@ -52,7 +52,7 @@ class Key(object):
             self.fp = fp
 
     def __str__(self):
-        return 'file://' + self.full_path
+        return f'file://{self.full_path}'
 
     def get_file(self, fp, headers=None, cb=None, num_cb=10, torrent=False):
         """
@@ -120,9 +120,9 @@ class Key(object):
             raise BotoClientError('Stream is not writable')
         elif self.key_type & self.KEY_STREAM_WRITABLE:
             key_file = self.fp
+        elif not replace and os.path.exists(self.full_path):
+            return
         else:
-            if not replace and os.path.exists(self.full_path):
-                return
             key_file = open(self.full_path, 'wb')
         try:
             shutil.copyfileobj(fp, key_file)

@@ -104,10 +104,7 @@ def RunGit(args, **kwargs):
 def RunGitWithCode(args, suppress_stderr=False):
   """Returns return code and stdout."""
   try:
-    if suppress_stderr:
-      stderr = subprocess2.VOID
-    else:
-      stderr = sys.stderr
+    stderr = subprocess2.VOID if suppress_stderr else sys.stderr
     out, code = subprocess2.communicate(['git'] + args,
                                         env=GetNoGitPagerEnv(),
                                         stdout=subprocess2.PIPE,
@@ -147,14 +144,13 @@ def git_set_branch_value(key, value):
   cmd = ['config']
   if isinstance(value, int):
     cmd.append('--int')
-  git_key = 'branch.%s.%s' % (branch, key)
+  git_key = f'branch.{branch}.{key}'
   RunGit(cmd + [git_key, str(value)])
 
 
 def git_get_branch_default(key, default):
-  branch = Changelist().GetBranch()
-  if branch:
-    git_key = 'branch.%s.%s' % (branch, key)
+  if branch := Changelist().GetBranch():
+    git_key = f'branch.{branch}.{key}'
     (_, stdout) = RunGitWithCode(['config', '--int', '--get', git_key])
     try:
       return int(stdout.strip())
@@ -223,14 +219,13 @@ def MatchSvnGlob(url, base_url, glob_spec, allow_wildcards):
   """
   fetch_suburl, as_ref = glob_spec.split(':')
   if allow_wildcards:
-    glob_match = re.match('(.+/)?(\*|{[^/]*})(/.+)?', fetch_suburl)
-    if glob_match:
+    if glob_match := re.match('(.+/)?(\*|{[^/]*})(/.+)?', fetch_suburl):
       # Parse specs like "branches/*/src:refs/remotes/svn/*" or
       # "branches/{472,597,648}/src:refs/remotes/svn/*".
       branch_re = re.escape(base_url)
-      if glob_match.group(1):
-        branch_re += '/' + re.escape(glob_match.group(1))
-      wildcard = glob_match.group(2)
+      if glob_match[1]:
+        branch_re += f'/{re.escape(glob_match[1])}'
+      wildcard = glob_match[2]
       if wildcard == '*':
         branch_re += '([^/]*)'
       else:
@@ -241,20 +236,14 @@ def MatchSvnGlob(url, base_url, glob_spec, allow_wildcards):
         wildcard = re.sub('\\\\,', '|', wildcard)
         wildcard = re.sub('\\\\}$', ')', wildcard)
         branch_re += wildcard
-      if glob_match.group(3):
-        branch_re += re.escape(glob_match.group(3))
-      match = re.match(branch_re, url)
-      if match:
-        return re.sub('\*$', match.group(1), as_ref)
+      if glob_match[3]:
+        branch_re += re.escape(glob_match[3])
+      if match := re.match(branch_re, url):
+        return re.sub('\*$', match[1], as_ref)
 
   # Parse specs like "trunk/src:refs/remotes/origin/trunk".
-  if fetch_suburl:
-    full_url = base_url + '/' + fetch_suburl
-  else:
-    full_url = base_url
-  if full_url == url:
-    return as_ref
-  return None
+  full_url = f'{base_url}/{fetch_suburl}' if fetch_suburl else base_url
+  return as_ref if full_url == url else None
 
 
 def print_stats(similarity, find_copies, args):
@@ -267,10 +256,9 @@ def print_stats(similarity, find_copies, args):
     del env['GIT_EXTERNAL_DIFF']
 
   if find_copies:
-    similarity_options = ['--find-copies-harder', '-l100000',
-                          '-C%s' % similarity]
+    similarity_options = ['--find-copies-harder', '-l100000', f'-C{similarity}']
   else:
-    similarity_options = ['-M%s' % similarity]
+    similarity_options = [f'-M{similarity}']
 
   try:
     stdout = sys.stdout.fileno()
@@ -323,11 +311,11 @@ class Settings(object):
           self._GetRietveldConfig('server', error_ok=True))
       if error_ok:
         return self.default_server
-      if not self.default_server:
-        error_message = ('Could not find settings file. You must configure '
-                         'your review setup by running "git cl config".')
-        self.default_server = gclient_utils.UpgradeToHttps(
-            self._GetRietveldConfig('server', error_message=error_message))
+    if not self.default_server:
+      error_message = ('Could not find settings file. You must configure '
+                       'your review setup by running "git cl config".')
+      self.default_server = gclient_utils.UpgradeToHttps(
+          self._GetRietveldConfig('server', error_message=error_message))
     return self.default_server
 
   @staticmethod
@@ -372,9 +360,8 @@ class Settings(object):
                                env=GetNoGitPagerEnv())
       url = None
       for line in proc.stdout:
-        match = git_svn_re.match(line)
-        if match:
-          url = match.group(1)
+        if match := git_svn_re.match(line):
+          url = match[1]
           proc.stdout.close()  # Cut pipe.
           break
 
@@ -383,33 +370,25 @@ class Settings(object):
         remotes = RunGit(['config', '--get-regexp',
                           r'^svn-remote\..*\.url']).splitlines()
         for remote in remotes:
-          match = svn_remote_re.match(remote)
-          if match:
-            remote = match.group(1)
-            base_url = match.group(2)
-            rewrite_root = RunGit(
-                ['config', 'svn-remote.%s.rewriteRoot' % remote],
-                error_ok=True).strip()
-            if rewrite_root:
+          if match := svn_remote_re.match(remote):
+            remote = match[1]
+            base_url = match[2]
+            if rewrite_root := RunGit(
+                ['config', f'svn-remote.{remote}.rewriteRoot'],
+                error_ok=True).strip():
               base_url = rewrite_root
-            fetch_spec = RunGit(
-                ['config', 'svn-remote.%s.fetch' % remote],
-                error_ok=True).strip()
-            if fetch_spec:
+            if fetch_spec := RunGit(['config', f'svn-remote.{remote}.fetch'],
+                                    error_ok=True).strip():
               self.svn_branch = MatchSvnGlob(url, base_url, fetch_spec, False)
               if self.svn_branch:
                 break
-            branch_spec = RunGit(
-                ['config', 'svn-remote.%s.branches' % remote],
-                error_ok=True).strip()
-            if branch_spec:
+            if branch_spec := RunGit(['config', f'svn-remote.{remote}.branches'],
+                                     error_ok=True).strip():
               self.svn_branch = MatchSvnGlob(url, base_url, branch_spec, True)
               if self.svn_branch:
                 break
-            tag_spec = RunGit(
-                ['config', 'svn-remote.%s.tags' % remote],
-                error_ok=True).strip()
-            if tag_spec:
+            if tag_spec := RunGit(['config', f'svn-remote.{remote}.tags'],
+                                  error_ok=True).strip():
               self.svn_branch = MatchSvnGlob(url, base_url, tag_spec, True)
               if self.svn_branch:
                 break
@@ -485,7 +464,7 @@ class Settings(object):
     return self.pending_ref_prefix
 
   def _GetRietveldConfig(self, param, **kwargs):
-    return self._GetConfig('rietveld.' + param, **kwargs)
+    return self._GetConfig(f'rietveld.{param}', **kwargs)
 
   def _GetConfig(self, param, **kwargs):
     self.LazyUpdateIfNeeded()
@@ -506,10 +485,7 @@ class Changelist(object):
       settings = Settings()
     settings.GetDefaultServerUrl()
     self.branchref = branchref
-    if self.branchref:
-      self.branch = ShortBranchName(self.branchref)
-    else:
-      self.branch = None
+    self.branch = ShortBranchName(self.branchref) if self.branchref else None
     self.rietveld_server = None
     self.upstream_branch = None
     self.lookedup_issue = False
@@ -569,33 +545,31 @@ class Changelist(object):
        e.g. 'origin', 'refs/heads/master'
     """
     remote = '.'
-    upstream_branch = RunGit(['config', 'branch.%s.merge' % branch],
+    upstream_branch = RunGit(['config', f'branch.{branch}.merge'],
                              error_ok=True).strip()
     if upstream_branch:
-      remote = RunGit(['config', 'branch.%s.remote' % branch]).strip()
+      remote = RunGit(['config', f'branch.{branch}.remote']).strip()
     else:
       upstream_branch = RunGit(['config', 'rietveld.upstream-branch'],
                                error_ok=True).strip()
       if upstream_branch:
         remote = RunGit(['config', 'rietveld.upstream-remote']).strip()
+      elif settings.GetIsGitSvn():
+        upstream_branch = settings.GetSVNBranch()
       else:
-        # Fall back on trying a git-svn upstream branch.
-        if settings.GetIsGitSvn():
-          upstream_branch = settings.GetSVNBranch()
+        # Else, try to guess the origin remote.
+        remote_branches = RunGit(['branch', '-r']).split()
+        if 'origin/master' in remote_branches:
+          # Fall back on origin/master if it exits.
+          remote = 'origin'
+          upstream_branch = 'refs/heads/master'
+        elif 'origin/trunk' in remote_branches:
+          # Fall back on origin/trunk if it exists. Generally a shared
+          # git-svn clone
+          remote = 'origin'
+          upstream_branch = 'refs/heads/trunk'
         else:
-          # Else, try to guess the origin remote.
-          remote_branches = RunGit(['branch', '-r']).split()
-          if 'origin/master' in remote_branches:
-            # Fall back on origin/master if it exits.
-            remote = 'origin'
-            upstream_branch = 'refs/heads/master'
-          elif 'origin/trunk' in remote_branches:
-            # Fall back on origin/trunk if it exists. Generally a shared
-            # git-svn clone
-            remote = 'origin'
-            upstream_branch = 'refs/heads/trunk'
-          else:
-            DieWithError("""Unable to determine default branch to diff against.
+          DieWithError("""Unable to determine default branch to diff against.
 Either pass complete "git diff"-style arguments, like
   git cl upload origin/master
 or verify this branch is set up to track another (via the --track argument to
@@ -612,7 +586,7 @@ or verify this branch is set up to track another (via the --track argument to
       remote, upstream_branch = self.FetchUpstreamTuple(self.GetBranch())
       if remote is not '.':
         upstream_branch = upstream_branch.replace('refs/heads/',
-                                                  'refs/remotes/%s/' % remote)
+                                                  f'refs/remotes/{remote}/')
         upstream_branch = upstream_branch.replace('refs/branch-heads/',
                                                   'refs/remotes/branch-heads/')
       self.upstream_branch = upstream_branch
@@ -651,7 +625,7 @@ or verify this branch is set up to track another (via the --track argument to
       elif branch.startswith('refs/branch-heads/'):
         self._remote = (remote, branch.replace('refs/', 'refs/remotes/'))
       else:
-        self._remote = (remote, 'refs/remotes/%s/%s' % (remote, branch))
+        self._remote = remote, f'refs/remotes/{remote}/{branch}'
     return self._remote
 
   def GitSanityChecks(self, upstream_git_obj):
@@ -703,7 +677,7 @@ or verify this branch is set up to track another (via the --track argument to
 
     Returns None if it is not set.
     """
-    return RunGit(['config', 'branch.%s.base-url' % self.GetBranch()],
+    return RunGit(['config', f'branch.{self.GetBranch()}.base-url'],
                   error_ok=True).strip()
 
   def GetGitSvnRemoteUrl(self):
@@ -711,9 +685,7 @@ or verify this branch is set up to track another (via the --track argument to
 
     Returns None if it is not set.
     """
-    # URL is dependent on the current directory.
-    data = RunGit(['svn', 'info'], cwd=settings.GetRoot())
-    if data:
+    if data := RunGit(['svn', 'info'], cwd=settings.GetRoot()):
       keys = dict(line.split(': ', 1) for line in data.splitlines()
                   if ': ' in line)
       return keys.get('URL', None)
@@ -725,12 +697,11 @@ or verify this branch is set up to track another (via the --track argument to
     Returns None if there is no remote.
     """
     remote, _ = self.GetRemoteBranch()
-    url = RunGit(['config', 'remote.%s.url' % remote], error_ok=True).strip()
+    url = RunGit(['config', f'remote.{remote}.url'], error_ok=True).strip()
 
     # If URL is pointing to a local directory, it is probably a git cache.
     if os.path.isdir(url):
-      url = RunGit(['config', 'remote.%s.url' % remote],
-                   error_ok=True,
+      url = RunGit(['config', f'remote.{remote}.url'], error_ok=True,
                    cwd=url).strip()
     return url
 
@@ -743,23 +714,19 @@ or verify this branch is set up to track another (via the --track argument to
     return self.issue
 
   def GetRietveldServer(self):
+    if not self.rietveld_server and self.GetIssue():
+      if rietveld_server_config := self._RietveldServer():
+        self.rietveld_server = gclient_utils.UpgradeToHttps(RunGit(
+            ['config', rietveld_server_config], error_ok=True).strip())
     if not self.rietveld_server:
-      # If we're on a branch then get the server potentially associated
-      # with that branch.
-      if self.GetIssue():
-        rietveld_server_config = self._RietveldServer()
-        if rietveld_server_config:
-          self.rietveld_server = gclient_utils.UpgradeToHttps(RunGit(
-              ['config', rietveld_server_config], error_ok=True).strip())
-      if not self.rietveld_server:
-        self.rietveld_server = settings.GetDefaultServerUrl()
+      self.rietveld_server = settings.GetDefaultServerUrl()
     return self.rietveld_server
 
   def GetIssueURL(self):
     """Get the URL for a particular issue."""
     if not self.GetIssue():
       return None
-    return '%s/%s' % (self.GetRietveldServer(), self.GetIssue())
+    return f'{self.GetRietveldServer()}/{self.GetIssue()}'
 
   def GetDescription(self, pretty=False):
     if not self.has_description:
@@ -817,16 +784,14 @@ or verify this branch is set up to track another (via the --track argument to
     return self.GetIssueProperties()['patchsets'][-1]
 
   def GetPatchSetDiff(self, issue, patchset):
-    return self.RpcServer().get(
-        '/download/issue%s_%s.diff' % (issue, patchset))
+    return self.RpcServer().get(f'/download/issue{issue}_{patchset}.diff')
 
   def GetIssueProperties(self):
     if self._props is None:
-      issue = self.GetIssue()
-      if not issue:
-        self._props = {}
-      else:
+      if issue := self.GetIssue():
         self._props = self.RpcServer().get_issue_properties(issue, True)
+      else:
+        self._props = {}
     return self._props
 
   def GetApprovingReviewers(self):
@@ -843,8 +808,7 @@ or verify this branch is set up to track another (via the --track argument to
       if self.rietveld_server:
         RunGit(['config', self._RietveldServer(), self.rietveld_server])
     else:
-      current_issue = self.GetIssue()
-      if current_issue:
+      if current_issue := self.GetIssue():
         RunGit(['config', '--unset', self._IssueSetting()])
       self.issue = None
       self.SetPatchset(None)
@@ -880,7 +844,7 @@ or verify this branch is set up to track another (via the --track argument to
       # If the change was never uploaded, use the log messages of all commits
       # up to the branch point, as git cl upload will prefill the description
       # with these log messages.
-      args = ['log', '--pretty=format:%s%n%n%b', '%s...' % (upstream_branch)]
+      args = ['log', '--pretty=format:%s%n%n%b', f'{upstream_branch}...']
       description = RunGitWithCode(args)[1].strip()
 
     if not author:
@@ -932,15 +896,12 @@ or verify this branch is set up to track another (via the --track argument to
       # Was LGTM'ed.
       return 'lgtm'
 
-    messages = props.get('messages') or []
-
-    if not messages:
+    if messages := props.get('messages') or []:
+      return ('reply' if messages[-1]['sender'] != props.get('owner_email') else
+              'waiting')
+    else:
       # No message was sent.
       return 'unsent'
-    if messages[-1]['sender'] != props.get('owner_email'):
-      # Non-LGTM reply from non-owner
-      return 'reply'
-    return 'waiting'
 
   def RunHook(self, committing, may_prompt, verbose, change):
     """Calls sys.exit() if the hook fails; returns a HookResults otherwise."""
@@ -990,17 +951,16 @@ or verify this branch is set up to track another (via the --track argument to
 
   def _IssueSetting(self):
     """Return the git setting that stores this change's issue."""
-    return 'branch.%s.rietveldissue' % self.GetBranch()
+    return f'branch.{self.GetBranch()}.rietveldissue'
 
   def _PatchsetSetting(self):
     """Return the git setting that stores this change's most recent patchset."""
-    return 'branch.%s.rietveldpatchset' % self.GetBranch()
+    return f'branch.{self.GetBranch()}.rietveldpatchset'
 
   def _RietveldServer(self):
     """Returns the git setting that stores this change's rietveld server."""
-    branch = self.GetBranch()
-    if branch:
-      return 'branch.%s.rietveldserver' % branch
+    if branch := self.GetBranch():
+      return f'branch.{branch}.rietveldserver'
     return None
 
 
@@ -1009,8 +969,8 @@ def GetCodereviewSettingsInteractively():
   # TODO(ukai): ask code review system is rietveld or gerrit?
   server = settings.GetDefaultServerUrl(error_ok=True)
   prompt = 'Rietveld server (host[:port])'
-  prompt += ' [%s]' % (server or DEFAULT_SERVER)
-  newserver = ask_for_data(prompt + ':')
+  prompt += f' [{server or DEFAULT_SERVER}]'
+  newserver = ask_for_data(f'{prompt}:')
   if not server and not newserver:
     newserver = DEFAULT_SERVER
   if newserver:
@@ -1021,15 +981,15 @@ def GetCodereviewSettingsInteractively():
   def SetProperty(initial, caption, name, is_url):
     prompt = caption
     if initial:
-      prompt += ' ("x" to clear) [%s]' % initial
-    new_val = ask_for_data(prompt + ':')
+      prompt += f' ("x" to clear) [{initial}]'
+    new_val = ask_for_data(f'{prompt}:')
     if new_val == 'x':
-      RunGit(['config', '--unset-all', 'rietveld.' + name], error_ok=True)
+      RunGit(['config', '--unset-all', f'rietveld.{name}'], error_ok=True)
     elif new_val:
       if is_url:
         new_val = gclient_utils.UpgradeToHttps(new_val)
       if new_val != initial:
-        RunGit(['config', 'rietveld.' + name, new_val])
+        RunGit(['config', f'rietveld.{name}', new_val])
 
   SetProperty(settings.GetDefaultCCList(), 'CC list', 'cc', False)
   SetProperty(settings.GetDefaultPrivateFlag(),
@@ -1132,7 +1092,7 @@ class ChangeDescription(object):
 
     regexp = re.compile(self.BUG_LINE)
     if not any((regexp.match(line) for line in self._description_lines)):
-      self.append_footer('BUG=%s' % settings.GetBugPrefix())
+      self.append_footer(f'BUG={settings.GetBugPrefix()}')
     content = gclient_utils.RunEditor(self.description, True,
                                       git_editor=settings.GetGitEditor())
     if not content:
@@ -1168,13 +1128,11 @@ def get_approving_reviewers(props):
   Note that the list may contain reviewers that are not committer, thus are not
   considered by the CQ.
   """
-  return sorted(
-      set(
-        message['sender']
-        for message in props['messages']
-        if message['approval'] and message['sender'] in props['reviewers']
-      )
-  )
+  return sorted({
+      message['sender']
+      for message in props['messages']
+      if message['approval'] and message['sender'] in props['reviewers']
+  })
 
 
 def FindCodereviewSettingsFile(filename='codereview.settings'):
@@ -1189,9 +1147,9 @@ def FindCodereviewSettingsFile(filename='codereview.settings'):
   if os.path.isfile(os.path.join(root, inherit_ok_file)):
     root = '/'
   while True:
-    if filename in os.listdir(cwd):
-      if os.path.isfile(os.path.join(cwd, filename)):
-        return open(os.path.join(cwd, filename))
+    if filename in os.listdir(cwd) and os.path.isfile(
+        os.path.join(cwd, filename)):
+      return open(os.path.join(cwd, filename))
     if cwd == root:
       break
     cwd = os.path.dirname(cwd)
@@ -1202,7 +1160,7 @@ def LoadCodereviewSettingsFromFile(fileobj):
   keyvals = gclient_utils.ParseCodereviewSettingsContent(fileobj.read())
 
   def SetProperty(name, setting, unset_error_ok=False):
-    fullname = 'rietveld.' + name
+    fullname = f'rietveld.{name}'
     if setting in keyvals:
       RunGit(['config', fullname, keyvals[setting]])
     else:
@@ -1257,12 +1215,11 @@ def DownloadHooks(force):
   """
   if not settings.GetIsGerrit():
     return
-  src = 'https://gerrit-review.googlesource.com/tools/hooks/commit-msg'
   dst = os.path.join(settings.GetRoot(), '.git', 'hooks', 'commit-msg')
   if not os.access(dst, os.X_OK):
-    if os.path.exists(dst):
-      if not force:
-        return
+    if os.path.exists(dst) and not force:
+      return
+    src = 'https://gerrit-review.googlesource.com/tools/hooks/commit-msg'
     try:
       urlretrieve(src, dst)
       if not hasSheBang(dst):
@@ -1322,11 +1279,10 @@ def CMDbaseurl(parser, args):
   _, args = parser.parse_args(args)
   if not args:
     print("Current base-url:")
-    return RunGit(['config', 'branch.%s.base-url' % branch],
-                  error_ok=False).strip()
+    return RunGit(['config', f'branch.{branch}.base-url'], error_ok=False).strip()
   else:
-    print("Setting base-url to %s" % args[0])
-    return RunGit(['config', 'branch.%s.base-url' % branch, args[0]],
+    print(f"Setting base-url to {args[0]}")
+    return RunGit(['config', f'branch.{branch}.base-url', args[0]],
                   error_ok=False).strip()
 
 
@@ -1379,8 +1335,7 @@ def get_cl_statuses(branches, fine_grained, max_processes=None):
           min(max_processes, len(branches_to_fetch))
               if max_processes is not None
               else len(branches_to_fetch))
-      for x in pool.imap_unordered(fetch_cl_status, branches_to_fetch):
-        yield x
+      yield from pool.imap_unordered(fetch_cl_status, branches_to_fetch)
   else:
     # Do not use GetApprovingReviewers(), since it requires an HTTP request.
     for b in branches:
@@ -1582,11 +1537,11 @@ def CreateDescriptionFromLog(args):
   """Pulls out the commit log to use as a base for the CL description."""
   log_args = []
   if len(args) == 1 and not args[0].endswith('.'):
-    log_args = [args[0] + '..']
+    log_args = [f'{args[0]}..']
   elif len(args) == 1 and args[0].endswith('...'):
     log_args = [args[0][:-1]]
   elif len(args) == 2:
-    log_args = [args[0] + '..' + args[1]]
+    log_args = [f'{args[0]}..{args[1]}']
   else:
     log_args = args[:]  # Hope for the best!
   return RunGit(['log', '--pretty=format:%s\n\n%b'] + log_args)
@@ -1815,18 +1770,18 @@ def GetTargetRef(remote, remote_branch, target_branch, pending_prefix):
     # refs, which are then translated into the remote full symbolic refs
     # below.
     if '/' not in target_branch:
-      remote_branch = 'refs/remotes/%s/%s' % (remote, target_branch)
+      remote_branch = f'refs/remotes/{remote}/{target_branch}'
     else:
       prefix_replacements = (
-        ('^((refs/)?remotes/)?branch-heads/', 'refs/remotes/branch-heads/'),
-        ('^((refs/)?remotes/)?%s/' % remote,  'refs/remotes/%s/' % remote),
-        ('^(refs/)?heads/',                   'refs/remotes/%s/' % remote),
+          ('^((refs/)?remotes/)?branch-heads/', 'refs/remotes/branch-heads/'),
+          (f'^((refs/)?remotes/)?{remote}/', f'refs/remotes/{remote}/'),
+          ('^(refs/)?heads/', f'refs/remotes/{remote}/'),
       )
       match = None
       for regex, replacement in prefix_replacements:
         match = re.search(regex, target_branch)
         if match:
-          remote_branch = target_branch.replace(match.group(0), replacement)
+          remote_branch = target_branch.replace(match[0], replacement)
           break
       if not match:
         # This is a branch path but not one we recognize; use as-is.
@@ -1840,11 +1795,10 @@ def GetTargetRef(remote, remote_branch, target_branch, pending_prefix):
   # * refs/remotes/origin/refs/diff/test -> refs/diff/test
   # * refs/remotes/origin/master -> refs/heads/master
   # * refs/remotes/branch-heads/test -> refs/branch-heads/test
-  if remote_branch.startswith('refs/remotes/%s/refs/' % remote):
-    remote_branch = remote_branch.replace('refs/remotes/%s/' % remote, '')
-  elif remote_branch.startswith('refs/remotes/%s/' % remote):
-    remote_branch = remote_branch.replace('refs/remotes/%s/' % remote,
-                                          'refs/heads/')
+  if remote_branch.startswith(f'refs/remotes/{remote}/refs/'):
+    remote_branch = remote_branch.replace(f'refs/remotes/{remote}/', '')
+  elif remote_branch.startswith(f'refs/remotes/{remote}/'):
+    remote_branch = remote_branch.replace(f'refs/remotes/{remote}/', 'refs/heads/')
   elif remote_branch.startswith('refs/remotes/branch-heads'):
     remote_branch = remote_branch.replace('refs/remotes/', 'refs/')
   # If a pending prefix exists then replace refs/ with it.
@@ -2101,7 +2055,7 @@ def IsSubmoduleMergeCommit(ref):
   # When submodules are added to the repo, we expect there to be a single
   # non-git-svn merge commit at remote HEAD with a signature comment.
   pattern = '^SVN changes up to revision [0-9]*$'
-  cmd = ['rev-list', '--merges', '--grep=%s' % pattern, '%s^!' % ref]
+  cmd = ['rev-list', '--merges', f'--grep={pattern}', f'{ref}^!']
   return RunGit(cmd) != ''
 
 
@@ -2621,8 +2575,7 @@ def CMDrebase(parser, args):
 def GetTreeStatus(url=None):
   """Fetches the tree status and returns either 'open', 'closed',
   'unknown' or 'unset'."""
-  url = url or settings.GetTreeStatusUrl(error_ok=True)
-  if url:
+  if url := url or settings.GetTreeStatusUrl(error_ok=True):
     status = urllib2.urlopen(url).read().lower()
     if status.find('closed') != -1 or status == '0':
       return 'closed'
@@ -2649,10 +2602,12 @@ def GetBuilderMaster(bot_list):
   try:
     master_map = json.load(urllib2.urlopen(map_url))
   except urllib2.URLError as e:
-    return None, ('Failed to fetch builder-to-master map from %s. Error: %s.' %
-                  (map_url, e))
+    return (
+        None,
+        f'Failed to fetch builder-to-master map from {map_url}. Error: {e}.',
+    )
   except ValueError as e:
-    return None, ('Invalid json string from %s. Error: %s.' % (map_url, e))
+    return None, f'Invalid json string from {map_url}. Error: {e}.'
   if not master_map:
     return None, 'Failed to build master map.'
 
@@ -2661,10 +2616,12 @@ def GetBuilderMaster(bot_list):
     builder = bot.split(':', 1)[0]
     master_list = master_map.get(builder, [])
     if not master_list:
-      return None, ('No matching master for builder %s.' % builder)
+      return None, f'No matching master for builder {builder}.'
     elif len(master_list) > 1:
-      return None, ('The builder name %s exists in multiple masters %s.' %
-                    (builder, master_list))
+      return (
+          None,
+          f'The builder name {builder} exists in multiple masters {master_list}.',
+      )
     else:
       cur_master = master_list[0]
       if not result_master:
@@ -2874,7 +2831,7 @@ def CMDset_commit(parser, args):
   """Sets the commit bit to trigger the Commit Queue."""
   _, args = parser.parse_args(args)
   if args:
-    parser.error('Unrecognized args: %s' % ' '.join(args))
+    parser.error(f"Unrecognized args: {' '.join(args)}")
   cl = Changelist()
   props = cl.GetIssueProperties()
   if props.get('private'):
@@ -2887,7 +2844,7 @@ def CMDset_close(parser, args):
   """Closes the issue."""
   _, args = parser.parse_args(args)
   if args:
-    parser.error('Unrecognized args: %s' % ' '.join(args))
+    parser.error(f"Unrecognized args: {' '.join(args)}")
   cl = Changelist()
   # Ensure there actually is an issue to close.
   cl.GetDescription()
@@ -2901,7 +2858,7 @@ def CMDdiff(parser, args):
   issue = cl.GetIssue()
   branch = cl.GetBranch()
   if not issue:
-    DieWithError('No issue found for current branch (%s)' % branch)
+    DieWithError(f'No issue found for current branch ({branch})')
   TMP_BRANCH = 'git-cl-diff'
   base_branch = cl.GetCommonAncestorWithUpstream()
 
@@ -2961,13 +2918,13 @@ def BuildGitDiffCmd(diff_type, upstream_commit, args, extensions):
   if args:
     for arg in args:
       if os.path.isdir(arg):
-        diff_cmd.extend(os.path.join(arg, '*' + ext) for ext in extensions)
+        diff_cmd.extend(os.path.join(arg, f'*{ext}') for ext in extensions)
       elif os.path.isfile(arg):
         diff_cmd.append(arg)
       else:
-        DieWithError('Argument "%s" is not a file or a directory' % arg)
+        DieWithError(f'Argument "{arg}" is not a file or a directory')
   else:
-    diff_cmd.extend('*' + ext for ext in extensions)
+    diff_cmd.extend(f'*{ext}' for ext in extensions)
 
   return diff_cmd
 

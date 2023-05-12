@@ -91,16 +91,10 @@ class HmacKeys(object):
             self._hmac_256 = None
 
     def algorithm(self):
-        if self._hmac_256:
-            return 'HmacSHA256'
-        else:
-            return 'HmacSHA1'
+        return 'HmacSHA256' if self._hmac_256 else 'HmacSHA1'
 
     def _get_hmac(self):
-        if self._hmac_256:
-            digestmod = sha256
-        else:
-            digestmod = sha
+        digestmod = sha256 if self._hmac_256 else sha
         return hmac.new(self._provider.secret_key,
                         digestmod=digestmod)
 
@@ -164,9 +158,7 @@ class HmacAuthV1Handler(AuthHandler, HmacKeys):
         boto.log.debug('StringToSign:\n%s' % string_to_sign)
         b64_hmac = self.sign_string(string_to_sign)
         auth_hdr = self._provider.auth_header
-        headers['Authorization'] = ("%s %s:%s" %
-                                    (auth_hdr,
-                                     self._provider.access_key, b64_hmac))
+        headers['Authorization'] = f"{auth_hdr} {self._provider.access_key}:{b64_hmac}"
 
 
 class HmacAuthV2Handler(AuthHandler, HmacKeys):
@@ -194,9 +186,7 @@ class HmacAuthV2Handler(AuthHandler, HmacKeys):
 
         b64_hmac = self.sign_string(headers['Date'])
         auth_hdr = self._provider.auth_header
-        headers['Authorization'] = ("%s %s:%s" %
-                                    (auth_hdr,
-                                     self._provider.access_key, b64_hmac))
+        headers['Authorization'] = f"{auth_hdr} {self._provider.access_key}:{b64_hmac}"
 
 
 class HmacAuthV3Handler(AuthHandler, HmacKeys):
@@ -218,8 +208,8 @@ class HmacAuthV3Handler(AuthHandler, HmacKeys):
             headers[key] = self._provider.security_token
 
         b64_hmac = self.sign_string(headers['Date'])
-        s = "AWS3-HTTPS AWSAccessKeyId=%s," % self._provider.access_key
-        s += "Algorithm=%s,Signature=%s" % (self.algorithm(), b64_hmac)
+        s = f"AWS3-HTTPS AWSAccessKeyId={self._provider.access_key},"
+        s += f"Algorithm={self.algorithm()},Signature={b64_hmac}"
         headers['X-Amzn-Authorization'] = s
 
 
@@ -254,8 +244,12 @@ class HmacAuthV3HTTPHandler(AuthHandler, HmacKeys):
         case, sorting them in alphabetical order and then joining
         them into a string, separated by newlines.
         """
-        l = sorted(['%s:%s' % (n.lower().strip(),
-                    headers_to_sign[n].strip()) for n in headers_to_sign])
+        l = sorted(
+            [
+                f'{n.lower().strip()}:{headers_to_sign[n].strip()}'
+                for n in headers_to_sign
+            ]
+        )
         return '\n'.join(l)
 
     def string_to_sign(self, http_request):
@@ -292,10 +286,10 @@ class HmacAuthV3HTTPHandler(AuthHandler, HmacKeys):
         boto.log.debug('StringToSign:\n%s' % string_to_sign)
         hash_value = sha256(string_to_sign).digest()
         b64_hmac = self.sign_string(hash_value)
-        s = "AWS3 AWSAccessKeyId=%s," % self._provider.access_key
-        s += "Algorithm=%s," % self.algorithm()
-        s += "SignedHeaders=%s," % ';'.join(headers_to_sign)
-        s += "Signature=%s" % b64_hmac
+        s = f"AWS3 AWSAccessKeyId={self._provider.access_key},"
+        s += f"Algorithm={self.algorithm()},"
+        s += f"SignedHeaders={';'.join(headers_to_sign)},"
+        s += f"Signature={b64_hmac}"
         req.headers['X-Amzn-Authorization'] = s
 
 
@@ -317,11 +311,11 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         self.region_name = region_name
 
     def _sign(self, key, msg, hex=False):
-        if hex:
-            sig = hmac.new(key, msg.encode('utf-8'), sha256).hexdigest()
-        else:
-            sig = hmac.new(key, msg.encode('utf-8'), sha256).digest()
-        return sig
+        return (
+            hmac.new(key, msg.encode('utf-8'), sha256).hexdigest()
+            if hex
+            else hmac.new(key, msg.encode('utf-8'), sha256).digest()
+        )
 
     def headers_to_sign(self, http_request):
         """
@@ -364,13 +358,16 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         case, sorting them in alphabetical order and then joining
         them into a string, separated by newlines.
         """
-        l = sorted(['%s:%s' % (n.lower().strip(),
-                    ' '.join(headers_to_sign[n].strip().split()))
-                    for n in headers_to_sign])
+        l = sorted(
+            [
+                f"{n.lower().strip()}:{' '.join(headers_to_sign[n].strip().split())}"
+                for n in headers_to_sign
+            ]
+        )
         return '\n'.join(l)
 
     def signed_headers(self, headers_to_sign):
-        l = ['%s' % n.lower().strip() for n in headers_to_sign]
+        l = [f'{n.lower().strip()}' for n in headers_to_sign]
         l = sorted(l)
         return ';'.join(l)
 
@@ -397,17 +394,18 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         return '\n'.join(cr)
 
     def scope(self, http_request):
-        scope = [self._provider.access_key]
-        scope.append(http_request.timestamp)
-        scope.append(http_request.region_name)
-        scope.append(http_request.service_name)
-        scope.append('aws4_request')
+        scope = [
+            self._provider.access_key,
+            http_request.timestamp,
+            http_request.region_name,
+            http_request.service_name,
+            'aws4_request',
+        ]
         return '/'.join(scope)
 
     def credential_scope(self, http_request):
-        scope = []
-        http_request.timestamp = http_request.headers['X-Amz-Date'][0:8]
-        scope.append(http_request.timestamp)
+        http_request.timestamp = http_request.headers['X-Amz-Date'][:8]
+        scope = [http_request.timestamp]
         # The service_name and region_name either come from:
         # * The service_name/region_name attrs or (if these values are None)
         # * parsed from the endpoint <service>.<region>.amazonaws.com.
@@ -415,21 +413,14 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         if self.region_name is not None:
             region_name = self.region_name
         else:
-            if len(parts) == 3:
-                region_name = 'us-east-1'
-            else:
-                region_name = parts[1]
-        if self.service_name is not None:
-            service_name = self.service_name
-        else:
-            service_name = parts[0]
-
+            region_name = 'us-east-1' if len(parts) == 3 else parts[1]
+        service_name = self.service_name if self.service_name is not None else parts[0]
         http_request.service_name = service_name
         http_request.region_name = region_name
 
-        scope.append(http_request.region_name)
-        scope.append(http_request.service_name)
-        scope.append('aws4_request')
+        scope.extend(
+            (http_request.region_name, http_request.service_name, 'aws4_request')
+        )
         return '/'.join(scope)
 
     def string_to_sign(self, http_request, canonical_request):
@@ -438,16 +429,17 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         containing the original version of all headers that
         were included in the StringToSign.
         """
-        sts = ['AWS4-HMAC-SHA256']
-        sts.append(http_request.headers['X-Amz-Date'])
-        sts.append(self.credential_scope(http_request))
+        sts = [
+            'AWS4-HMAC-SHA256',
+            http_request.headers['X-Amz-Date'],
+            self.credential_scope(http_request),
+        ]
         sts.append(sha256(canonical_request).hexdigest())
         return '\n'.join(sts)
 
     def signature(self, http_request, string_to_sign):
         key = self._provider.secret_key
-        k_date = self._sign(('AWS4' + key).encode('utf-8'),
-                              http_request.timestamp)
+        k_date = self._sign(f'AWS4{key}'.encode('utf-8'), http_request.timestamp)
         k_region = self._sign(k_date, http_request.region_name)
         k_service = self._sign(k_region, http_request.service_name)
         k_signing = self._sign(k_service, 'aws4_request')
@@ -479,7 +471,7 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
             # Safe to modify req.path here since
             # the signature will use req.auth_path.
             req.path = req.path.split('?')[0]
-            req.path = req.path + '?' + qs
+            req.path = f'{req.path}?{qs}'
         canonical_request = self.canonical_request(req)
         boto.log.debug('CanonicalRequest:\n%s' % canonical_request)
         string_to_sign = self.string_to_sign(req, canonical_request)
@@ -487,9 +479,9 @@ class HmacAuthV4Handler(AuthHandler, HmacKeys):
         signature = self.signature(req, string_to_sign)
         boto.log.debug('Signature:\n%s' % signature)
         headers_to_sign = self.headers_to_sign(req)
-        l = ['AWS4-HMAC-SHA256 Credential=%s' % self.scope(req)]
-        l.append('SignedHeaders=%s' % self.signed_headers(headers_to_sign))
-        l.append('Signature=%s' % signature)
+        l = [f'AWS4-HMAC-SHA256 Credential={self.scope(req)}']
+        l.append(f'SignedHeaders={self.signed_headers(headers_to_sign)}')
+        l.append(f'Signature={signature}')
         req.headers['Authorization'] = ','.join(l)
 
 
@@ -509,18 +501,17 @@ class QuerySignatureHelper(HmacKeys):
         qs, signature = self._calc_signature(
             http_request.params, http_request.method,
             http_request.auth_path, http_request.host)
-        boto.log.debug('query_string: %s Signature: %s' % (qs, signature))
+        boto.log.debug(f'query_string: {qs} Signature: {signature}')
         if http_request.method == 'POST':
             headers['Content-Type'] = 'application/x-www-form-urlencoded; charset=UTF-8'
-            http_request.body = qs + '&Signature=' + urllib.quote_plus(signature)
+            http_request.body = f'{qs}&Signature={urllib.quote_plus(signature)}'
             http_request.headers['Content-Length'] = str(len(http_request.body))
         else:
             http_request.body = ''
             # if this is a retried request, the qs from the previous try will
             # already be there, we need to get rid of that and rebuild it
             http_request.path = http_request.path.split('?')[0]
-            http_request.path = (http_request.path + '?' + qs +
-                                 '&Signature=' + urllib.quote_plus(signature))
+            http_request.path = f'{http_request.path}?{qs}&Signature={urllib.quote_plus(signature)}'
 
 
 class QuerySignatureV0AuthHandler(QuerySignatureHelper, AuthHandler):
@@ -539,7 +530,7 @@ class QuerySignatureV0AuthHandler(QuerySignatureHelper, AuthHandler):
         pairs = []
         for key in keys:
             val = boto.utils.get_utf8_value(params[key])
-            pairs.append(key + '=' + urllib.quote(val))
+            pairs.append(f'{key}={urllib.quote(val)}')
         qs = '&'.join(pairs)
         return (qs, base64.b64encode(hmac.digest()))
 
@@ -567,7 +558,7 @@ class QuerySignatureV1AuthHandler(QuerySignatureHelper, AuthHandler):
             hmac.update(key)
             val = boto.utils.get_utf8_value(params[key])
             hmac.update(val)
-            pairs.append(key + '=' + urllib.quote(val))
+            pairs.append(f'{key}={urllib.quote(val)}')
         qs = '&'.join(pairs)
         return (qs, base64.b64encode(hmac.digest()))
 
@@ -593,13 +584,13 @@ class QuerySignatureV2AuthHandler(QuerySignatureHelper, AuthHandler):
             pairs.append(urllib.quote(key, safe='') + '=' +
                          urllib.quote(val, safe='-_~'))
         qs = '&'.join(pairs)
-        boto.log.debug('query string: %s' % qs)
+        boto.log.debug(f'query string: {qs}')
         string_to_sign += qs
-        boto.log.debug('string_to_sign: %s' % string_to_sign)
+        boto.log.debug(f'string_to_sign: {string_to_sign}')
         hmac.update(string_to_sign)
         b64 = base64.b64encode(hmac.digest())
         boto.log.debug('len(b64)=%d' % len(b64))
-        boto.log.debug('base64 encoded digest: %s' % b64)
+        boto.log.debug(f'base64 encoded digest: {b64}')
         return (qs, b64)
 
 
@@ -617,7 +608,7 @@ class POSTPathQSV2AuthHandler(QuerySignatureV2AuthHandler, AuthHandler):
         req.params['Timestamp'] = boto.utils.get_ts()
         qs, signature = self._calc_signature(req.params, req.method,
                                              req.auth_path, req.host)
-        boto.log.debug('query_string: %s Signature: %s' % (qs, signature))
+        boto.log.debug(f'query_string: {qs} Signature: {signature}')
         if req.method == 'POST':
             req.headers['Content-Length'] = str(len(req.body))
             req.headers['Content-Type'] = req.headers.get('Content-Type',
@@ -627,8 +618,7 @@ class POSTPathQSV2AuthHandler(QuerySignatureV2AuthHandler, AuthHandler):
         # if this is a retried req, the qs from the previous try will
         # already be there, we need to get rid of that and rebuild it
         req.path = req.path.split('?')[0]
-        req.path = (req.path + '?' + qs +
-                             '&Signature=' + urllib.quote_plus(signature))
+        req.path = f'{req.path}?{qs}&Signature={urllib.quote_plus(signature)}'
 
 
 def get_auth_handler(host, config, provider, requested_capability=None):

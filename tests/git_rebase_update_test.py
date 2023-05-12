@@ -52,7 +52,7 @@ class GitRebaseUpdateTest(git_test_utils.GitRepoReadWriteTestBase):
     """, self.getRepoContent)
     self.origin = origin_schema.reify()
     self.origin.git('checkout', 'master')
-    self.origin.git('branch', '-d', *['branch_'+l for l in 'KLG'])
+    self.origin.git('branch', '-d', *[f'branch_{l}' for l in 'KLG'])
 
     self.repo.git('remote', 'add', 'origin', self.origin.repo_path)
     self.repo.git('config', '--add', 'remote.origin.fetch',

@@ -62,14 +62,11 @@ class ECSConnection(AWSQueryConnection):
         boto.log.debug(body)
 
         if response.status != 200:
-            boto.log.error('%s %s' % (response.status, response.reason))
-            boto.log.error('%s' % body)
+            boto.log.error(f'{response.status} {response.reason}')
+            boto.log.error(f'{body}')
             raise self.ResponseError(response.status, response.reason, body)
 
-        if itemSet == None:
-            rs = ItemSet(self, action, params, page)
-        else:
-            rs = itemSet
+        rs = ItemSet(self, action, params, page) if itemSet is None else itemSet
         h = handler.XmlHandler(rs, self)
         xml.sax.parseString(body, h)
         return rs

@@ -58,8 +58,8 @@ class SimpleMock(object):
     caller_name = kwargs.pop('caller_name', None) or inspect.stack()[1][3]
     str_args = ', '.join(repr(arg) for arg in args)
     str_kwargs = ', '.join('%s=%r' % (k, v) for k, v in kwargs.iteritems())
-    self.calls.append('%s(%s)' % (
-        caller_name, ', '.join(filter(None, [str_args, str_kwargs]))))
+    self.calls.append(
+        f"{caller_name}({', '.join(filter(None, [str_args, str_kwargs]))})")
 
 
 class TestCase(unittest.TestCase, AutoStubMixIn):

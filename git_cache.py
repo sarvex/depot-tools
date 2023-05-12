@@ -46,7 +46,7 @@ class Lockfile(object):
 
   def __init__(self, path):
     self.path = os.path.abspath(path)
-    self.lockfile = self.path + ".lock"
+    self.lockfile = f"{self.path}.lock"
     self.pid = os.getpid()
 
   def _read_pid(self):
@@ -84,7 +84,7 @@ class Lockfile(object):
         if exitcode == 0:
           return
         time.sleep(3)
-      raise LockError('Failed to remove lock: %s' % lockfile)
+      raise LockError(f'Failed to remove lock: {lockfile}')
     else:
       os.remove(self.lockfile)
 
@@ -98,17 +98,17 @@ class Lockfile(object):
       self._make_lockfile()
     except OSError as e:
       if e.errno == errno.EEXIST:
-        raise LockError("%s is already locked" % self.path)
+        raise LockError(f"{self.path} is already locked")
       else:
-        raise LockError("Failed to create %s (err %s)" % (self.path, e.errno))
+        raise LockError(f"Failed to create {self.path} (err {e.errno})")
 
   def unlock(self):
     """Release the lock."""
     try:
       if not self.is_locked():
-        raise LockError("%s is not locked" % self.path)
+        raise LockError(f"{self.path} is not locked")
       if not self.i_am_locking():
-        raise LockError("%s is locked, but not by me" % self.path)
+        raise LockError(f"{self.path} is locked, but not by me")
       self._remove_lockfile()
     except WinErr:
       # Windows is unreliable when it comes to file locking.  YMMV.
@@ -183,7 +183,7 @@ class Mirror(object):
   def CacheDirToUrl(path):
     """Convert a cache dir path to its corresponding url."""
     netpath = re.sub(r'\b-\b', '/', os.path.basename(path)).replace('--', '-')
-    return 'https://%s' % netpath
+    return f'https://{netpath}'
 
   @staticmethod
   def FindExecutable(executable):
@@ -231,7 +231,7 @@ class Mirror(object):
     env = kwargs.get('env') or kwargs.setdefault('env', os.environ.copy())
     env.setdefault('GIT_ASKPASS', 'true')
     env.setdefault('SSH_ASKPASS', 'true')
-    self.print('running "git %s" in "%s"' % (' '.join(cmd), cwd))
+    self.print(f"""running "git {' '.join(cmd)}" in "{cwd}\"""")
     gclient_utils.CheckCallAndFilter([self.git_exe] + cmd, **kwargs)
 
   def config(self, cwd=None):
@@ -257,10 +257,10 @@ class Mirror(object):
     for ref in self.refs:
       ref = ref.lstrip('+').rstrip('/')
       if ref.startswith('refs/'):
-        refspec = '+%s:%s' % (ref, ref)
+        refspec = f'+{ref}:{ref}'
         regex = r'\+%s:.*' % ref.replace('*', r'\*')
       else:
-        refspec = '+refs/%s/*:refs/%s/*' % (ref, ref)
+        refspec = f'+refs/{ref}/*:refs/{ref}/*'
         regex = r'\+refs/heads/%s:.*' % ref.replace('*', r'\*')
       self.RunGit(
           ['config', '--replace-all', 'remote.origin.fetch', refspec, regex],
@@ -281,7 +281,7 @@ class Mirror(object):
     elif not self.FindExecutable('unzip'):
       python_fallback = True
 
-    gs_folder = 'gs://%s/%s' % (self.bootstrap_bucket, self.basedir)
+    gs_folder = f'gs://{self.bootstrap_bucket}/{self.basedir}'
     gsutil = Gsutil(self.gsutil_exe, boto_path=None)
     # Get the most recent version of the zipfile.
     _, ls_out, _ = gsutil.check_call('ls', gs_folder)
@@ -294,16 +294,15 @@ class Mirror(object):
     # Download zip file to a temporary directory.
     try:
       tempdir = tempfile.mkdtemp(prefix='_cache_tmp', dir=self.GetCachePath())
-      self.print('Downloading %s' % latest_checkout)
-      code = gsutil.call('cp', latest_checkout, tempdir)
-      if code:
+      self.print(f'Downloading {latest_checkout}')
+      if code := gsutil.call('cp', latest_checkout, tempdir):
         return False
       filename = os.path.join(tempdir, latest_checkout.split('/')[-1])
 
       # Unpack the file with 7z on Windows, unzip on linux, or fallback.
       if not python_fallback:
         if sys.platform.startswith('win'):
-          cmd = ['7z', 'x', '-o%s' % directory, '-tzip', filename]
+          cmd = ['7z', 'x', f'-o{directory}', '-tzip', filename]
         else:
           cmd = ['unzip', filename, '-d', directory]
         retcode = subprocess.call(cmd)
@@ -313,7 +312,7 @@ class Mirror(object):
             f.printdir()
             f.extractall(directory)
         except Exception as e:
-          self.print('Encountered error: %s' % str(e), file=sys.stderr)
+          self.print(f'Encountered error: {str(e)}', file=sys.stderr)
           retcode = 1
         else:
           retcode = 0
@@ -340,14 +339,12 @@ class Mirror(object):
     if os.path.isdir(pack_dir):
       pack_files = [f for f in os.listdir(pack_dir) if f.endswith('.pack')]
 
-    should_bootstrap = (force or
-                        not os.path.exists(config_file) or
-                        len(pack_files) > GC_AUTOPACKLIMIT)
-    if should_bootstrap:
+    if should_bootstrap := (force or not os.path.exists(config_file)
+                            or len(pack_files) > GC_AUTOPACKLIMIT):
       tempdir = tempfile.mkdtemp(
           prefix='_cache_tmp', suffix=self.basedir, dir=self.GetCachePath())
-      bootstrapped = not depth and bootstrap and self.bootstrap_repo(tempdir)
-      if bootstrapped:
+      if (bootstrapped := not depth and bootstrap
+          and self.bootstrap_repo(tempdir)):
         # Bootstrap succeeded; delete previous cache, if any.
         gclient_utils.rmtree(self.mirror_path)
       elif not os.path.exists(config_file):
@@ -361,32 +358,27 @@ class Mirror(object):
             % len(pack_files))
         gclient_utils.rmtree(tempdir)
         tempdir = None
-    else:
-      if depth and os.path.exists(os.path.join(self.mirror_path, 'shallow')):
-        logging.warn(
-            'Shallow fetch requested, but repo cache already exists.')
+    elif depth and os.path.exists(os.path.join(self.mirror_path, 'shallow')):
+      logging.warn(
+          'Shallow fetch requested, but repo cache already exists.')
     return tempdir
 
   def _fetch(self, rundir, verbose, depth):
     self.config(rundir)
-    v = []
-    d = []
-    if verbose:
-      v = ['-v', '--progress']
-    if depth:
-      d = ['--depth', str(depth)]
+    v = ['-v', '--progress'] if verbose else []
+    d = ['--depth', str(depth)] if depth else []
     fetch_cmd = ['fetch'] + v + d + ['origin']
     fetch_specs = subprocess.check_output(
         [self.git_exe, 'config', '--get-all', 'remote.origin.fetch'],
         cwd=rundir).strip().splitlines()
     for spec in fetch_specs:
       try:
-        self.print('Fetching %s' % spec)
+        self.print(f'Fetching {spec}')
         self.RunGit(fetch_cmd + [spec], cwd=rundir, retry=True)
       except subprocess.CalledProcessError:
         if spec == '+refs/heads/*:refs/heads/*':
           raise RefsHeadsFailedToFetch
-        logging.warn('Fetch of %s failed' % spec)
+        logging.warn(f'Fetch of {spec} failed')
 
   def populate(self, depth=None, shallow=False, bootstrap=False,
                verbose=False, ignore_lock=False):
@@ -421,8 +413,7 @@ class Mirror(object):
           # This is somehow racy on Windows.
           # Catching OSError because WindowsError isn't portable and
           # pylint complains.
-          self.print('Error moving %s to %s: %s' % (tempdir, self.mirror_path,
-                                                    str(e)))
+          self.print(f'Error moving {tempdir} to {self.mirror_path}: {str(e)}')
       if not ignore_lock:
         lockfile.unlock()
 
@@ -437,8 +428,8 @@ class Mirror(object):
     os.remove(tmp_zipfile)
     subprocess.call(['zip', '-r', tmp_zipfile, '.'], cwd=self.mirror_path)
     gsutil = Gsutil(path=self.gsutil_exe, boto_path=None)
-    gs_folder = 'gs://%s/%s' % (self.bootstrap_bucket, self.basedir)
-    dest_name = '%s/%s.zip' % (gs_folder, gen_number)
+    gs_folder = f'gs://{self.bootstrap_bucket}/{self.basedir}'
+    dest_name = f'{gs_folder}/{gen_number}.zip'
     gsutil.call('cp', tmp_zipfile, dest_name)
     os.remove(tmp_zipfile)
 
@@ -461,9 +452,9 @@ class Mirror(object):
       f = os.path.join(pack_dir, f)
       try:
         os.remove(f)
-        logging.warn('Deleted stale temporary pack file %s' % f)
+        logging.warn(f'Deleted stale temporary pack file {f}')
       except OSError:
-        logging.warn('Unable to delete temporary pack file %s' % f)
+        logging.warn(f'Unable to delete temporary pack file {f}')
 
   @classmethod
   def BreakLocks(cls, path):
@@ -489,8 +480,10 @@ class Mirror(object):
     if not cachepath:
       return
     dirlist = os.listdir(cachepath)
-    repo_dirs = set([os.path.join(cachepath, path) for path in dirlist
-                     if os.path.isdir(os.path.join(cachepath, path))])
+    repo_dirs = {
+        os.path.join(cachepath, path)
+        for path in dirlist if os.path.isdir(os.path.join(cachepath, path))
+    }
     for dirent in dirlist:
       if dirent.startswith('_cache_tmp') or dirent.startswith('tmp'):
         gclient_utils.rm_file_or_tree(os.path.join(cachepath, dirent))
@@ -498,18 +491,13 @@ class Mirror(object):
           os.path.isfile(os.path.join(cachepath, dirent))):
         repo_dirs.add(os.path.join(cachepath, dirent[:-5]))
 
-    unlocked_repos = []
-    for repo_dir in repo_dirs:
-      if cls.BreakLocks(repo_dir):
-        unlocked_repos.append(repo_dir)
-
-    return unlocked_repos
+    return [repo_dir for repo_dir in repo_dirs if cls.BreakLocks(repo_dir)]
 
 @subcommand.usage('[url of repo to check for caching]')
 def CMDexists(parser, args):
   """Check to see if there already is a cache of the given repo."""
   _, args = parser.parse_args(args)
-  if not len(args) == 1:
+  if len(args) != 1:
     parser.error('git cache exists only takes exactly one repo url.')
   url = args[0]
   mirror = Mirror(url)
@@ -560,7 +548,7 @@ def CMDpopulate(parser, args):
                     help='Don\'t try to lock repository')
 
   options, args = parser.parse_args(args)
-  if not len(args) == 1:
+  if len(args) != 1:
     parser.error('git cache populate only takes exactly one repo url.')
   url = args[0]
 
@@ -597,8 +585,8 @@ def CMDfetch(parser, args):
         [Mirror.git_exe, 'rev-parse', '--abbrev-ref', 'HEAD']).strip()
     if current_branch != 'HEAD':
       upstream = subprocess.check_output(
-          [Mirror.git_exe, 'config', 'branch.%s.remote' % current_branch]
-      ).strip()
+          [Mirror.git_exe, 'config',
+           f'branch.{current_branch}.remote']).strip()
       if upstream and upstream != '.':
         remotes = [upstream]
   if not remotes:
@@ -614,7 +602,7 @@ def CMDfetch(parser, args):
     return 0
   for remote in remotes:
     remote_url = subprocess.check_output(
-        [Mirror.git_exe, 'config', 'remote.%s.url' % remote]).strip()
+        [Mirror.git_exe, 'config', f'remote.{remote}.url']).strip()
     if remote_url.startswith(cachepath):
       mirror = Mirror.FromPath(remote_url)
       mirror.print = lambda *args: None

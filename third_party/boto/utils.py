@@ -99,10 +99,7 @@ _end_cap_regex = re.compile('([a-z0-9])([A-Z])')
 
 
 def unquote_v(nv):
-    if len(nv) == 1:
-        return nv
-    else:
-        return (nv[0], urllib.unquote(nv[1]))
+    return nv if len(nv) == 1 else (nv[0], urllib.unquote(nv[1]))
 
 
 def canonical_string(method, path, headers, expires=None,
@@ -152,8 +149,7 @@ def canonical_string(method, path, headers, expires=None,
     if len(t) > 1:
         qsa = t[1].split('&')
         qsa = [a.split('=', 1) for a in qsa]
-        qsa = [unquote_v(a) for a in qsa if a[0] in qsa_of_interest]
-        if len(qsa) > 0:
+        if qsa := [unquote_v(a) for a in qsa if a[0] in qsa_of_interest]:
             qsa.sort(cmp=lambda x, y:cmp(x[0], y[0]))
             qsa = ['='.join(a) for a in qsa]
             buf += '?'
@@ -238,18 +234,17 @@ class LazyLoadMetadata(dict):
         self._num_retries = num_retries
         self._leaves = {}
         self._dicts = []
-        data = boto.utils.retry_url(self._url, num_retries=self._num_retries)
-        if data:
+        if data := boto.utils.retry_url(self._url, num_retries=self._num_retries):
             fields = data.split('\n')
             for field in fields:
                 if field.endswith('/'):
-                    key = field[0:-1]
+                    key = field[:-1]
                     self._dicts.append(key)
                 else:
                     p = field.find('=')
                     if p > 0:
                         key = field[p + 1:]
-                        resource = field[0:p] + '/openssh-key'
+                        resource = f'{field[:p]}/openssh-key'
                     else:
                         key = resource = field
                     self._leaves[key] = resource
@@ -365,15 +360,14 @@ def get_instance_identity(version='latest', url='http://169.254.169.254',
 
 def get_instance_userdata(version='latest', sep=None,
                           url='http://169.254.169.254'):
-    ud_url = '%s/%s/user-data' % (url, version)
+    ud_url = f'{url}/{version}/user-data'
     user_data = retry_url(ud_url, retry_on_404=False)
-    if user_data:
-        if sep:
-            l = user_data.split(sep)
-            user_data = {}
-            for nvpair in l:
-                t = nvpair.split('=')
-                user_data[t[0].strip()] = t[1].strip()
+    if user_data and sep:
+        l = user_data.split(sep)
+        user_data = {}
+        for nvpair in l:
+            t = nvpair.split('=')
+            user_data[t[0].strip()] = t[1].strip()
     return user_data
 
 ISO8601 = '%Y-%m-%dT%H:%M:%SZ'
@@ -389,25 +383,20 @@ def get_ts(ts=None):
 def parse_ts(ts):
     ts = ts.strip()
     try:
-        dt = datetime.datetime.strptime(ts, ISO8601)
-        return dt
+        return datetime.datetime.strptime(ts, ISO8601)
     except ValueError:
-        dt = datetime.datetime.strptime(ts, ISO8601_MS)
-        return dt
+        return datetime.datetime.strptime(ts, ISO8601_MS)
 
 
 def find_class(module_name, class_name=None):
     if class_name:
-        module_name = "%s.%s" % (module_name, class_name)
+        module_name = f"{module_name}.{class_name}"
     modules = module_name.split('.')
     c = None
 
     try:
         for m in modules[1:]:
-            if c:
-                c = getattr(c, m)
-            else:
-                c = getattr(__import__(".".join(modules[0:-1])), m)
+            c = getattr(c, m) if c else getattr(__import__(".".join(modules[:-1])), m)
         return c
     except:
         return None
@@ -417,8 +406,10 @@ def update_dme(username, password, dme_id, ip_address):
     """
     Update your Dynamic DNS record with DNSMadeEasy.com
     """
-    dme_url = 'https://www.dnsmadeeasy.com/servlet/updateip'
-    dme_url += '?username=%s&password=%s&id=%s&ip=%s'
+    dme_url = (
+        'https://www.dnsmadeeasy.com/servlet/updateip'
+        + '?username=%s&password=%s&id=%s&ip=%s'
+    )
     s = urllib2.urlopen(dme_url % (username, password, dme_id, ip_address))
     return s.read()
 
@@ -430,8 +421,8 @@ def fetch_file(uri, file=None, username=None, password=None):
     retrieved is returned.
     The URI can be either an HTTP url, or "s3://bucket_name/key_name"
     """
-    boto.log.info('Fetching %s' % uri)
-    if file == None:
+    boto.log.info(f'Fetching {uri}')
+    if file is None:
         file = tempfile.NamedTemporaryFile()
     try:
         if uri.startswith('s3://'):
@@ -453,8 +444,6 @@ def fetch_file(uri, file=None, username=None, password=None):
         file.seek(0)
     except:
         raise
-        boto.log.exception('Problem Retrieving file: %s' % uri)
-        file = None
     return file
 
 
@@ -469,14 +458,14 @@ class ShellCommand(object):
         self.run(cwd=cwd)
 
     def run(self, cwd=None):
-        boto.log.info('running:%s' % self.command)
+        boto.log.info(f'running:{self.command}')
         self.process = subprocess.Popen(self.command, shell=True,
                                         stdin=subprocess.PIPE,
                                         stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE,
                                         cwd=cwd)
-        if(self.wait):
-            while self.process.poll() == None:
+        if self.wait:
+            while self.process.poll() is None:
                 time.sleep(1)
                 t = self.process.communicate()
                 self.log_fp.write(t[0])
@@ -485,7 +474,7 @@ class ShellCommand(object):
             self.exit_code = self.process.returncode
 
             if self.fail_fast and self.exit_code != 0:
-                raise Exception("Command " + self.command + " failed with status " + self.exit_code)
+                raise Exception(f"Command {self.command} failed with status {self.exit_code}")
 
             return self.exit_code
 
@@ -606,7 +595,7 @@ class LRUCache(dict):
             return repr(self.value)
 
     def __init__(self, capacity):
-        self._dict = dict()
+        self._dict = {}
         self.capacity = capacity
         self.head = None
         self.tail = None
@@ -705,20 +694,17 @@ class Password(object):
         return str(self.hashfunc(other).hexdigest()) == str(self.str)
 
     def __len__(self):
-        if self.str:
-            return len(self.str)
-        else:
-            return 0
+        return len(self.str) if self.str else 0
 
 
 def notify(subject, body=None, html_body=None, to_string=None,
            attachments=None, append_instance_id=True):
-    attachments = attachments or []
     if append_instance_id:
-        subject = "[%s] %s" % (boto.config.get_value("Instance", "instance-id"), subject)
+        subject = f'[{boto.config.get_value("Instance", "instance-id")}] {subject}'
     if not to_string:
         to_string = boto.config.get_value('Notification', 'smtp_to', None)
     if to_string:
+        attachments = attachments or []
         try:
             from_string = boto.config.get_value('Notification', 'smtp_from', 'boto')
             msg = email.mime.multipart.MIMEMultipart()
@@ -766,18 +752,12 @@ def notify(subject, body=None, html_body=None, to_string=None,
 def get_utf8_value(value):
     if not isinstance(value, str) and not isinstance(value, unicode):
         value = str(value)
-    if isinstance(value, unicode):
-        return value.encode('utf-8')
-    else:
-        return value
+    return value.encode('utf-8') if isinstance(value, unicode) else value
 
 
 def mklist(value):
     if not isinstance(value, list):
-        if isinstance(value, tuple):
-            value = list(value)
-        else:
-            value = [value]
+        value = list(value) if isinstance(value, tuple) else [value]
     return value
 
 
@@ -903,24 +883,18 @@ def compute_md5(fp, buf_size=8192, size=None):
 def compute_hash(fp, buf_size=8192, size=None, hash_algorithm=md5):
     hash_obj = hash_algorithm()
     spos = fp.tell()
-    if size and size < buf_size:
-        s = fp.read(size)
-    else:
-        s = fp.read(buf_size)
+    s = fp.read(size) if size and size < buf_size else fp.read(buf_size)
     while s:
         hash_obj.update(s)
         if size:
             size -= len(s)
             if size <= 0:
                 break
-        if size and size < buf_size:
-            s = fp.read(size)
-        else:
-            s = fp.read(buf_size)
+        s = fp.read(size) if size and size < buf_size else fp.read(buf_size)
     hex_digest = hash_obj.hexdigest()
     base64_digest = base64.encodestring(hash_obj.digest())
     if base64_digest[-1] == '\n':
-        base64_digest = base64_digest[0:-1]
+        base64_digest = base64_digest[:-1]
     # data_size based on bytes read.
     data_size = fp.tell() - spos
     fp.seek(spos)

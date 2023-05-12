@@ -41,11 +41,20 @@ def main(argv):
   map_extra = config_list('depot_tools.map_extra')
   fmt = '%C(red bold)%h%x09%Creset%C(green)%d%Creset %C(yellow)%ad%Creset ~ %s'
   log_proc = subprocess2.Popen(
-    [GIT_EXE, 'log', '--graph', '--branches', '--tags', root(),
-     '--color=always', '--date=short', ('--pretty=format:' + fmt)
-    ] + map_extra + argv,
-    stdout=subprocess2.PIPE,
-    shell=False)
+      (([
+          GIT_EXE,
+          'log',
+          '--graph',
+          '--branches',
+          '--tags',
+          root(),
+          '--color=always',
+          '--date=short',
+          f'--pretty=format:{fmt}',
+      ] + map_extra) + argv),
+      stdout=subprocess2.PIPE,
+      shell=False,
+  )
 
   current = current_branch()
   all_branches = set(branches())
@@ -58,20 +67,24 @@ def main(argv):
     for line in log_proc.stdout.xreadlines():
       if merge_base_map:
         commit = line[line.find(BRIGHT_RED)+len(BRIGHT_RED):line.find('\t')]
-        base_for_branches = set()
-        for branch, sha in merge_base_map.iteritems():
-          if sha.startswith(commit):
-            base_for_branches.add(branch)
-        if base_for_branches:
+        if base_for_branches := {
+            branch
+            for branch, sha in merge_base_map.iteritems()
+            if sha.startswith(commit)
+        }:
           newline = '\r\n' if line.endswith('\r\n') else '\n'
           line = line.rstrip(newline)
-          line += ''.join(
-              (BRIGHT, WHITE, '    <(%s)' % (', '.join(base_for_branches)),
-               RESET, newline))
+          line += ''.join((
+              BRIGHT,
+              WHITE,
+              f"    <({', '.join(base_for_branches)})",
+              RESET,
+              newline,
+          ))
           for b in base_for_branches:
             del merge_base_map[b]
 
-      start = line.find(GREEN+' (')
+      start = line.find(f'{GREEN} (')
       end   = line.find(')', start)
       if start != -1 and end != -1:
         start += len(GREEN) + 2
@@ -96,8 +109,8 @@ def main(argv):
               colored_branches.append(MAGENTA+BRIGHT+b[5:]+RESET)
             else:
               colored_branches.append(RED+b)
-            branches_str = '(%s) ' % ((GREEN+", ").join(colored_branches)+GREEN)
-          line = "%s%s%s" % (line[:start-1], branches_str, line[end+5:])
+            branches_str = f'({f"{GREEN}, ".join(colored_branches) + GREEN}) '
+          line = f"{line[:start - 1]}{branches_str}{line[end + 5:]}"
           if head_marker:
             line = line.replace('*', head_marker, 1)
       sys.stdout.write(line)

@@ -42,8 +42,7 @@ class InvalidCertificateException(httplib.HTTPException):
     self.reason = reason
 
   def __str__(self):
-    return ('Host %s returned an invalid certificate (%s): %s' %
-            (self.host, self.reason, self.cert))
+    return f'Host {self.host} returned an invalid certificate ({self.reason}): {self.cert}'
 
 def GetValidHostsForCert(cert):
   """Returns a list of valid host globs for an SSL certificate.
@@ -74,7 +73,7 @@ def ValidateCertificateHostname(cert, hostname):
       hostname, hosts)
   for host in hosts:
     host_re = host.replace('.', '\.').replace('*', '[^.]*')
-    if re.search('^%s$' % (host_re,), hostname, re.I):
+    if re.search(f'^{host_re}$', hostname, re.I):
       return True
   return False
 

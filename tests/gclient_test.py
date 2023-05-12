@@ -149,9 +149,9 @@ class GclientTest(trial_dir.TestCase):
       self.assertTrue(
           actual.index('svn://example.com/bar') <
           actual.index('svn://example.com/bar_empty'))
-      self.assertEquals(first_3, sorted(actual[0:3]))
+      self.assertEquals(first_3, sorted(actual[:3]))
     else:
-      self.assertEquals(first_3, actual[0:3])
+      self.assertEquals(first_3, actual[:3])
     self.assertEquals(
         [
           'svn://example.com/foo/dir1',

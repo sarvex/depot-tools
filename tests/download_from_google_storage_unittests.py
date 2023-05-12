@@ -45,18 +45,12 @@ class GsutilMock(object):
   def call(self, *args):
     with self.lock:
       self.append_history('call', args)
-      if self.expected:
-        return self.expected.pop(0)[0]
-      else:
-        return 0
+      return self.expected.pop(0)[0] if self.expected else 0
 
   def check_call(self, *args):
     with self.lock:
       self.append_history('check_call', args)
-      if self.expected:
-        return self.expected.pop(0)
-      else:
-        return (0, '', '')
+      return self.expected.pop(0) if self.expected else (0, '', '')
 
 
 class GstoolsUnitTests(unittest.TestCase):
@@ -157,7 +151,7 @@ class DownloadTests(unittest.TestCase):
 
   def test_download_worker_single_file(self):
     sha1_hash = '7871c8e24da15bad8b0be2c36edc9dc77e37727f'
-    input_filename = '%s/%s' % (self.base_url, sha1_hash)
+    input_filename = f'{self.base_url}/{sha1_hash}'
     output_filename = os.path.join(self.base_path, 'uploaded_lorem_ipsum.txt')
     self.queue.put((sha1_hash, output_filename))
     self.queue.put((None, None))
@@ -176,8 +170,7 @@ class DownloadTests(unittest.TestCase):
            ('ls',
             '-L',
             'gs://sometesturl/7871c8e24da15bad8b0be2c36edc9dc77e37727f')))
-    expected_output = [
-        '0> Downloading %s...' % output_filename]
+    expected_output = [f'0> Downloading {output_filename}...']
     expected_ret_codes = []
     self.assertEqual(list(stdout_queue.queue), expected_output)
     self.assertEqual(self.gsutil.history, expected_calls)
@@ -193,14 +186,14 @@ class DownloadTests(unittest.TestCase):
         0, self.queue, False, self.base_url, self.gsutil,
         stdout_queue, self.ret_codes, True)
     expected_output = [
-        '0> File %s exists and SHA1 matches. Skipping.' % output_filename
+        f'0> File {output_filename} exists and SHA1 matches. Skipping.'
     ]
     self.assertEqual(list(stdout_queue.queue), expected_output)
     self.assertEqual(self.gsutil.history, [])
 
   def test_download_worker_skips_not_found_file(self):
     sha1_hash = '7871c8e24da15bad8b0be2c36edc9dc77e37727f'
-    input_filename = '%s/%s' % (self.base_url, sha1_hash)
+    input_filename = f'{self.base_url}/{sha1_hash}'
     output_filename = os.path.join(self.base_path, 'uploaded_lorem_ipsum.txt')
     self.queue.put((sha1_hash, output_filename))
     self.queue.put((None, None))
@@ -210,16 +203,14 @@ class DownloadTests(unittest.TestCase):
         0, self.queue, False, self.base_url, self.gsutil,
         stdout_queue, self.ret_codes, True)
     expected_output = [
-        '0> File %s for %s does not exist, skipping.' % (
-            input_filename, output_filename),
+        f'0> File {input_filename} for {output_filename} does not exist, skipping.'
     ]
     expected_calls = [
         ('check_call',
             ('ls', input_filename))
     ]
     expected_ret_codes = [
-        (1, 'File %s for %s does not exist.' % (
-            input_filename, output_filename))
+        (1, f'File {input_filename} for {output_filename} does not exist.')
     ]
     self.assertEqual(list(stdout_queue.queue), expected_output)
     self.assertEqual(self.gsutil.history, expected_calls)
@@ -227,7 +218,7 @@ class DownloadTests(unittest.TestCase):
 
   def test_download_cp_fails(self):
     sha1_hash = '7871c8e24da15bad8b0be2c36edc9dc77e37727f'
-    input_filename = '%s/%s' % (self.base_url, sha1_hash)
+    input_filename = f'{self.base_url}/{sha1_hash}'
     output_filename = os.path.join(self.base_path, 'uploaded_lorem_ipsum.txt')
     self.gsutil.add_expected(0, '', '')
     self.gsutil.add_expected(101, '', 'Test error message.')
@@ -261,7 +252,7 @@ class DownloadTests(unittest.TestCase):
 
   def test_download_directory_no_recursive_non_force(self):
     sha1_hash = '7871c8e24da15bad8b0be2c36edc9dc77e37727f'
-    input_filename = '%s/%s' % (self.base_url, sha1_hash)
+    input_filename = f'{self.base_url}/{sha1_hash}'
     output_filename = os.path.join(self.base_path, 'uploaded_lorem_ipsum.txt')
     code = download_from_google_storage.download_from_google_storage(
         input_filename=self.base_path,

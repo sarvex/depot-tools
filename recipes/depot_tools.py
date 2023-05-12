@@ -25,10 +25,8 @@ class DepotTools(recipe_util.Recipe):
       'solutions': [solution],
       'auto': True,
     }
-    checkout_type = 'gclient_git_svn'
-    if props.get('nosvn'):
-      checkout_type = 'gclient_git'
-    spec_type = '%s_spec' % checkout_type
+    checkout_type = 'gclient_git' if props.get('nosvn') else 'gclient_git_svn'
+    spec_type = f'{checkout_type}_spec'
     return {
       'type': checkout_type,
       spec_type: spec,

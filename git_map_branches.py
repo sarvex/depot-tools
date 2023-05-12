@@ -147,9 +147,7 @@ class BranchMapper(object):
 
       parent = branch_info.upstream
       if not self.__branches_info[parent]:
-        branch_upstream = upstream(branch)
-        # If git can't find the upstream, mark the upstream as gone.
-        if branch_upstream:
+        if branch_upstream := upstream(branch):
           parent = branch_upstream
         else:
           self.__gone_branches.add(parent)

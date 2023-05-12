@@ -68,7 +68,7 @@ def _QueryString(param_dict, first_param=None):
   https://gerrit-review.googlesource.com/Documentation/rest-api-changes.html#list-changes
   """
   q = [urllib.quote(first_param)] if first_param else []
-  q.extend(['%s:%s' % (key, val) for key, val in param_dict.iteritems()])
+  q.extend([f'{key}:{val}' for key, val in param_dict.iteritems()])
   return '+'.join(q)
 
 
@@ -80,36 +80,33 @@ def GetConnectionClass(protocol=None):
   elif protocol == 'http':
     return httplib.HTTPConnection
   else:
-    raise RuntimeError(
-        "Don't know how to work with protocol '%s'" % protocol)
+    raise RuntimeError(f"Don't know how to work with protocol '{protocol}'")
 
 
 def CreateHttpConn(host, path, reqtype='GET', headers=None, body=None):
   """Opens an https connection to a gerrit service, and sends a request."""
   headers = headers or {}
   bare_host = host.partition(':')[0]
-  auth = NETRC.authenticators(bare_host)
-
-  if auth:
-    headers.setdefault('Authorization', 'Basic %s' % (
-        base64.b64encode('%s:%s' % (auth[0], auth[2]))))
+  if auth := NETRC.authenticators(bare_host):
+    headers.setdefault('Authorization',
+                       f"Basic {base64.b64encode(f'{auth[0]}:{auth[2]}')}")
   else:
-    LOGGER.debug('No authorization found in netrc for %s.' % bare_host)
+    LOGGER.debug(f'No authorization found in netrc for {bare_host}.')
 
   if 'Authorization' in headers and not path.startswith('a/'):
-    url = '/a/%s' % path
+    url = f'/a/{path}'
   else:
-    url = '/%s' % path
+    url = f'/{path}'
 
   if body:
     body = json.JSONEncoder().encode(body)
     headers.setdefault('Content-Type', 'application/json')
   if LOGGER.isEnabledFor(logging.DEBUG):
-    LOGGER.debug('%s %s://%s%s' % (reqtype, GERRIT_PROTOCOL, host, url))
+    LOGGER.debug(f'{reqtype} {GERRIT_PROTOCOL}://{host}{url}')
     for key, val in headers.iteritems():
       if key == 'Authorization':
         val = 'HIDDEN'
-      LOGGER.debug('%s: %s' % (key, val))
+      LOGGER.debug(f'{key}: {val}')
     if body:
       LOGGER.debug(body)
   conn = GetConnectionClass()(host)
@@ -145,7 +142,7 @@ def ReadHttpResponse(conn, expect_status=200, ignore_404=True):
     if (response.status in (httplib.UNAUTHORIZED, httplib.FOUND) and
         www_authenticate):
       auth_match = re.search('realm="([^"]+)"', www_authenticate, re.I)
-      host = auth_match.group(1) if auth_match else conn.req_host
+      host = auth_match[1] if auth_match else conn.req_host
       reason = ('Authentication failed. Please make sure your .netrc file '
                 'has credentials for %s' % host)
       raise GerritAuthenticationError(response.status, reason)
@@ -154,7 +151,7 @@ def ReadHttpResponse(conn, expect_status=200, ignore_404=True):
     if response.status < 500:
       break
     # A status >=500 is assumed to be a possible transient error; retry.
-    http_version = 'HTTP/%s' % ('1.1' if response.version == 11 else '1.0')
+    http_version = f"HTTP/{'1.1' if response.version == 11 else '1.0'}"
     msg = (
         'A transient error occured while querying %s:\n'
         '%s %s %s\n'
@@ -175,7 +172,7 @@ def ReadHttpResponse(conn, expect_status=200, ignore_404=True):
   if ignore_404 and response.status == 404:
     return StringIO()
   if response.status != expect_status:
-    reason = '%s: %s' % (response.reason, response.read())
+    reason = f'{response.reason}: {response.read()}'
     raise GerritError(response.status, reason)
   return StringIO(response.read())
 
@@ -187,11 +184,9 @@ def ReadHttpJsonResponse(conn, expect_status=200, ignore_404=True):
   # The first line of the response should always be: )]}'
   s = fh.readline()
   if s and s.rstrip() != ")]}'":
-    raise GerritError(200, 'Unexpected json output: %s' % s)
+    raise GerritError(200, f'Unexpected json output: {s}')
   s = fh.read()
-  if not s:
-    return None
-  return json.loads(s)
+  return None if not s else json.loads(s)
 
 
 def QueryChanges(host, param_dict, first_param=None, limit=None, o_params=None,
@@ -212,13 +207,13 @@ def QueryChanges(host, param_dict, first_param=None, limit=None, o_params=None,
   # Note that no attempt is made to escape special characters; YMMV.
   if not param_dict and not first_param:
     raise RuntimeError('QueryChanges requires search parameters')
-  path = 'changes/?q=%s' % _QueryString(param_dict, first_param)
+  path = f'changes/?q={_QueryString(param_dict, first_param)}'
   if sortkey:
-    path = '%s&N=%s' % (path, sortkey)
+    path = f'{path}&N={sortkey}'
   if limit:
     path = '%s&n=%d' % (path, limit)
   if o_params:
-    path = '%s&%s' % (path, '&'.join(['o=%s' % p for p in o_params]))
+    path = f"{path}&{'&'.join([f'o={p}' for p in o_params])}"
   # Don't ignore 404; a query should always return a list, even if it's empty.
   return ReadHttpJsonResponse(CreateHttpConn(host, path), ignore_404=False)
 
@@ -247,9 +242,7 @@ def GenerateAllChanges(host, param_dict, first_param=None, limit=500,
   more_changes = True
   while more_changes:
     page = QueryChanges(host, param_dict, first_param, limit, o_params, sortkey)
-    for cl in page:
-      yield cl
-
+    yield from page
     more_changes = [cl for cl in page if '_more_changes' in cl]
     if len(more_changes) > 1:
       raise GerritError(
@@ -266,16 +259,16 @@ def MultiQueryChanges(host, param_dict, change_list, limit=None, o_params=None,
   if not change_list:
     raise RuntimeError(
         "MultiQueryChanges requires a list of change numbers/id's")
-  q = ['q=%s' % '+OR+'.join([urllib.quote(str(x)) for x in change_list])]
+  q = [f"q={'+OR+'.join([urllib.quote(str(x)) for x in change_list])}"]
   if param_dict:
     q.append(_QueryString(param_dict))
   if limit:
     q.append('n=%d' % limit)
   if sortkey:
-    q.append('N=%s' % sortkey)
+    q.append(f'N={sortkey}')
   if o_params:
-    q.extend(['o=%s' % p for p in o_params])
-  path = 'changes/?%s' % '&'.join(q)
+    q.extend([f'o={p}' for p in o_params])
+  path = f"changes/?{'&'.join(q)}"
   try:
     result = ReadHttpJsonResponse(CreateHttpConn(host, path), ignore_404=False)
   except GerritError as e:
@@ -286,7 +279,7 @@ def MultiQueryChanges(host, param_dict, change_list, limit=None, o_params=None,
 
 def GetGerritFetchUrl(host):
   """Given a gerrit host name returns URL of a gerrit instance to fetch from."""
-  return '%s://%s/' % (GERRIT_PROTOCOL, host)
+  return f'{GERRIT_PROTOCOL}://{host}/'
 
 
 def GetChangePageUrl(host, change_number):
@@ -296,20 +289,20 @@ def GetChangePageUrl(host, change_number):
 
 def GetChangeUrl(host, change):
   """Given a gerrit host name and change id, return an url for the change."""
-  return '%s://%s/a/changes/%s' % (GERRIT_PROTOCOL, host, change)
+  return f'{GERRIT_PROTOCOL}://{host}/a/changes/{change}'
 
 
 def GetChange(host, change):
   """Query a gerrit server for information about a single change."""
-  path = 'changes/%s' % change
+  path = f'changes/{change}'
   return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
 def GetChangeDetail(host, change, o_params=None):
   """Query a gerrit server for extended information about a single change."""
-  path = 'changes/%s/detail' % change
+  path = f'changes/{change}/detail'
   if o_params:
-    path += '?%s' % '&'.join(['o=%s' % p for p in o_params])
+    path += f"?{'&'.join([f'o={p}' for p in o_params])}"
   return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
@@ -330,7 +323,7 @@ def GetChangeReview(host, change, revision=None):
     if not jmsg:
       return None
     elif len(jmsg) > 1:
-      raise GerritError(200, 'Multiple changes found for ChangeId %s.' % change)
+      raise GerritError(200, f'Multiple changes found for ChangeId {change}.')
     revision = jmsg[0]['current_revision']
   path = 'changes/%s/revisions/%s/review'
   return ReadHttpJsonResponse(CreateHttpConn(host, path))
@@ -338,7 +331,7 @@ def GetChangeReview(host, change, revision=None):
 
 def AbandonChange(host, change, msg=''):
   """Abandon a gerrit change."""
-  path = 'changes/%s/abandon' % change
+  path = f'changes/{change}/abandon'
   body = {'message': msg} if msg else None
   conn = CreateHttpConn(host, path, reqtype='POST', body=body)
   return ReadHttpJsonResponse(conn, ignore_404=False)
@@ -346,7 +339,7 @@ def AbandonChange(host, change, msg=''):
 
 def RestoreChange(host, change, msg=''):
   """Restore a previously abandoned change."""
-  path = 'changes/%s/restore' % change
+  path = f'changes/{change}/restore'
   body = {'message': msg} if msg else None
   conn = CreateHttpConn(host, path, reqtype='POST', body=body)
   return ReadHttpJsonResponse(conn, ignore_404=False)
@@ -354,7 +347,7 @@ def RestoreChange(host, change, msg=''):
 
 def SubmitChange(host, change, wait_for_merge=True):
   """Submits a gerrit change via Gerrit."""
-  path = 'changes/%s/submit' % change
+  path = f'changes/{change}/submit'
   body = {'wait_for_merge': wait_for_merge}
   conn = CreateHttpConn(host, path, reqtype='POST', body=body)
   return ReadHttpJsonResponse(conn, ignore_404=False)
@@ -362,13 +355,13 @@ def SubmitChange(host, change, wait_for_merge=True):
 
 def GetReviewers(host, change):
   """Get information about all reviewers attached to a change."""
-  path = 'changes/%s/reviewers' % change
+  path = f'changes/{change}/reviewers'
   return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
 def GetReview(host, change, revision):
   """Get review information about a specific revision of a change."""
-  path = 'changes/%s/revisions/%s/review' % (change, revision)
+  path = f'changes/{change}/revisions/{revision}/review'
   return ReadHttpJsonResponse(CreateHttpConn(host, path))
 
 
@@ -378,7 +371,7 @@ def AddReviewers(host, change, add=None):
     return
   if isinstance(add, basestring):
     add = (add,)
-  path = 'changes/%s/reviewers' % change
+  path = f'changes/{change}/reviewers'
   for r in add:
     body = {'reviewer': r}
     conn = CreateHttpConn(host, path, reqtype='POST', body=body)
@@ -393,7 +386,7 @@ def RemoveReviewers(host, change, remove=None):
   if isinstance(remove, basestring):
     remove = (remove,)
   for r in remove:
-    path = 'changes/%s/reviewers/%s' % (change, r)
+    path = f'changes/{change}/reviewers/{r}'
     conn = CreateHttpConn(host, path, reqtype='DELETE')
     try:
       ReadHttpResponse(conn, ignore_404=False)
@@ -411,7 +404,7 @@ def SetReview(host, change, msg=None, labels=None, notify=None):
   """Set labels and/or add a message to a code review."""
   if not msg and not labels:
     return
-  path = 'changes/%s/revisions/current/review' % change
+  path = f'changes/{change}/revisions/current/review'
   body = {}
   if msg:
     body['message'] = msg
@@ -425,8 +418,7 @@ def SetReview(host, change, msg=None, labels=None, notify=None):
     for key, val in labels.iteritems():
       if ('labels' not in response or key not in response['labels'] or
           int(response['labels'][key] != int(val))):
-        raise GerritError(200, 'Unable to set "%s" label on change %s.' % (
-            key, change))
+        raise GerritError(200, f'Unable to set "{key}" label on change {change}.')
 
 
 def ResetReviewLabels(host, change, label, value='0', message=None,
@@ -439,16 +431,17 @@ def ResetReviewLabels(host, change, label, value='0', message=None,
   jmsg = GetChangeCurrentRevision(host, change)
   if not jmsg:
     raise GerritError(
-        200, 'Could not get review information for change "%s"' % change)
-  value = str(value)
+        200, f'Could not get review information for change "{change}"')
   revision = jmsg[0]['current_revision']
-  path = 'changes/%s/revisions/%s/review' % (change, revision)
-  message = message or (
-      '%s label set to %s programmatically.' % (label, value))
+  path = f'changes/{change}/revisions/{revision}/review'
+  value = str(value)
+  message = message or f'{label} label set to {value} programmatically.'
   jmsg = GetReview(host, change, revision)
   if not jmsg:
-    raise GerritError(200, 'Could not get review information for revison %s '
-                   'of change %s' % (revision, change))
+    raise GerritError(
+        200,
+        f'Could not get review information for revison {revision} of change {change}',
+    )
   for review in jmsg.get('labels', {}).get(label, {}).get('all', []):
     if str(review.get('value', value)) != value:
       body = {
@@ -463,12 +456,16 @@ def ResetReviewLabels(host, change, label, value='0', message=None,
       response = ReadHttpJsonResponse(conn)
       if str(response['labels'][label]) != value:
         username = review.get('email', jmsg.get('name', ''))
-        raise GerritError(200, 'Unable to set %s label for user "%s"'
-                       ' on change %s.' % (label, username, change))
+        raise GerritError(
+            200,
+            f'Unable to set {label} label for user "{username}" on change {change}.',
+        )
   jmsg = GetChangeCurrentRevision(host, change)
   if not jmsg:
     raise GerritError(
-        200, 'Could not get review information for change "%s"' % change)
+        200, f'Could not get review information for change "{change}"')
   elif jmsg[0]['current_revision'] != revision:
-    raise GerritError(200, 'While resetting labels on change "%s", '
-                   'a new patchset was uploaded.' % change)
+    raise GerritError(
+        200,
+        f'While resetting labels on change "{change}", a new patchset was uploaded.',
+    )

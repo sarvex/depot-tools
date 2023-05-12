@@ -32,8 +32,7 @@ def versioned_bucket_lister(bucket, prefix='', delimiter='',
                                      generation_marker=generation_marker,
                                      delimiter=delimiter, headers=headers,
                                      max_keys=999)
-        for k in rs:
-            yield k
+        yield from rs
         marker = rs.next_marker
         generation_marker = rs.next_generation_marker
         more_results= rs.is_truncated

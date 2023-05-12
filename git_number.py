@@ -70,7 +70,7 @@ def get_number_tree(prefix_bytes):
   >>> get_number_tree('\x83\xb4')
   {'\x83\xb4\xe3\xe4W\xf9J*\x8f/c\x16\xecD\xd1\x04\x8b\xa9qz': 169, ...}
   """
-  ref = '%s:%s' % (REF, pathlify(prefix_bytes))
+  ref = f'{REF}:{pathlify(prefix_bytes)}'
 
   try:
     raw = buffer(git.run('cat-file', 'blob', ref, autostrip=False))
@@ -131,7 +131,7 @@ def finalize(targets):
   if not DIRTY_TREES:
     return
 
-  msg = 'git-number Added %s numbers' % sum(DIRTY_TREES.itervalues())
+  msg = f'git-number Added {sum(DIRTY_TREES.itervalues())} numbers'
 
   idx = os.path.join(git.run('rev-parse', '--git-dir'), 'number.idx')
   env = os.environ.copy()
@@ -156,13 +156,15 @@ def finalize(targets):
 
     tree_id = git.run('write-tree', env=env)
     commit_cmd = [
-        # Git user.name and/or user.email may not be configured, so specifying
-        # them explicitly. They are not used, but requried by Git.
-        '-c', 'user.name=%s' % AUTHOR_NAME,
-        '-c', 'user.email=%s' % AUTHOR_EMAIL,
+        '-c',
+        f'user.name={AUTHOR_NAME}',
+        '-c',
+        f'user.email={AUTHOR_EMAIL}',
         'commit-tree',
-        '-m', msg,
-        '-p'] + git.hash_multi(REF)
+        '-m',
+        msg,
+        '-p',
+    ] + git.hash_multi(REF)
     for t in targets:
       commit_cmd.extend(['-p', binascii.hexlify(t)])
     commit_cmd.append(tree_id)
@@ -218,7 +220,11 @@ def load_generation_numbers(targets):
       # approach in python (as opposed to iterating over the lines in the
       # stdout as they're produced). GIL strikes again :/
       cmd = [
-        'rev-list', '--topo-order', '--parents', '--reverse', '^' + REF,
+          'rev-list',
+          '--topo-order',
+          '--parents',
+          '--reverse',
+          f'^{REF}',
       ] + map(binascii.hexlify, targets)
       for line in git.run(*cmd).splitlines():
         tokens = map(binascii.unhexlify, line.split())

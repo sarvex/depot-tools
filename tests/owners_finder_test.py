@@ -111,12 +111,14 @@ class _BaseTestCase(unittest.TestCase):
     self.glob = self.repo.glob
 
   def ownersFinder(self, files):
-    finder = OutputInterceptedOwnersFinder(files, self.root,
-                                           fopen=self.fopen,
-                                           os_path=self.repo,
-                                           glob=self.glob,
-                                           disable_color=True)
-    return finder
+    return OutputInterceptedOwnersFinder(
+        files,
+        self.root,
+        fopen=self.fopen,
+        os_path=self.repo,
+        glob=self.glob,
+        disable_color=True,
+    )
 
   def defaultFinder(self):
     return self.ownersFinder(self.default_files)
@@ -128,9 +130,7 @@ class OwnersFinderTests(_BaseTestCase):
 
   def test_reset(self):
     finder = self.defaultFinder()
-    i = 0
-    while i < 2:
-      i += 1
+    for _ in range(2):
       self.assertEqual(finder.owners_queue,
                        [brett, john, darin, peter, ken, ben, tom])
       self.assertEqual(finder.unreviewed_files, {
@@ -163,8 +163,7 @@ class OwnersFinderTests(_BaseTestCase):
                                           'content/baz/ugly.cc': john,
                                           'content/baz/ugly.h': john,
                                           'content/content.gyp': john})
-    self.assertEqual(finder.output,
-                     ['Selected: ' + john, 'Deselected: ' + darin])
+    self.assertEqual(finder.output, [f'Selected: {john}', f'Deselected: {darin}'])
 
     finder = self.defaultFinder()
     finder.select_owner(darin)
@@ -175,8 +174,7 @@ class OwnersFinderTests(_BaseTestCase):
                                           'content/baz/ugly.cc': darin,
                                           'content/baz/ugly.h': darin,
                                           'content/content.gyp': darin})
-    self.assertEqual(finder.output,
-                     ['Selected: ' + darin, 'Deselected: ' + john])
+    self.assertEqual(finder.output, [f'Selected: {darin}', f'Deselected: {john}'])
 
     finder = self.defaultFinder()
     finder.select_owner(brett)
@@ -190,8 +188,7 @@ class OwnersFinderTests(_BaseTestCase):
                       'chrome/renderer/safe_browsing/scorer.h': brett,
                       'content/baz/ugly.cc': brett,
                       'content/baz/ugly.h': brett})
-    self.assertEqual(finder.output,
-                     ['Selected: ' + brett, 'Deselected: ' + ben])
+    self.assertEqual(finder.output, [f'Selected: {brett}', f'Deselected: {ben}'])
 
   def test_deselect(self):
     finder = self.defaultFinder()
@@ -203,8 +200,7 @@ class OwnersFinderTests(_BaseTestCase):
                                           'content/baz/ugly.cc': darin,
                                           'content/baz/ugly.h': darin,
                                           'content/content.gyp': darin})
-    self.assertEqual(finder.output,
-                     ['Deselected: ' + john, 'Selected: ' + darin])
+    self.assertEqual(finder.output, [f'Deselected: {john}', f'Selected: {darin}'])
 
   def test_print_file_info(self):
     finder = self.defaultFinder()
@@ -233,7 +229,7 @@ class OwnersFinderTests(_BaseTestCase):
     finder = self.defaultFinder()
     finder.print_comments(darin)
     self.assertEqual(finder.output,
-                     [darin + ' is commented as:', ['foo (at content)']])
+                     [f'{darin} is commented as:', ['foo (at content)']])
 
 
 if __name__ == '__main__':

@@ -141,12 +141,27 @@ class TestGitCl(TestCase):
                           'branch.master.git-find-copies', val],), '')
 
     if find_copies:
-      stat_call = ((['git', 'diff', '--no-ext-diff', '--stat',
-                   '--find-copies-harder', '-l100000', '-C'+similarity,
-                   'fake_ancestor_sha', 'HEAD'],), '+dat')
+      stat_call = ([
+          'git',
+          'diff',
+          '--no-ext-diff',
+          '--stat',
+          '--find-copies-harder',
+          '-l100000',
+          f'-C{similarity}',
+          'fake_ancestor_sha',
+          'HEAD',
+      ], ), '+dat'
     else:
-      stat_call = ((['git', 'diff', '--no-ext-diff', '--stat',
-                   '-M'+similarity, 'fake_ancestor_sha', 'HEAD'],), '+dat')
+      stat_call = ([
+          'git',
+          'diff',
+          '--no-ext-diff',
+          '--stat',
+          f'-M{similarity}',
+          'fake_ancestor_sha',
+          'HEAD',
+      ], ), '+dat'
 
     return [
       ((['git', 'config', 'rietveld.autoupdate'],), ''),
@@ -229,25 +244,25 @@ class TestGitCl(TestCase):
     fake_ancestor = 'fake_ancestor'
     fake_cl = 'fake_cl_for_patch'
     return [
-      # Calls to verify branch point is ancestor
-      ((['git',
-         'rev-parse', '--verify', diff_base],), fake_ancestor),
-      ((['git',
-         'merge-base', fake_ancestor, 'HEAD'],), fake_ancestor),
-      ((['git',
-         'rev-list', '^' + fake_ancestor, 'HEAD'],), fake_cl),
-      # Mock a config miss (error code 1)
-      ((['git',
-         'config', 'gitcl.remotebranch'],), (('', None), 1)),
-      # Call to GetRemoteBranch()
-      ((['git',
-         'config', 'branch.%s.merge' % working_branch],),
-       'refs/heads/master'),
-      ((['git',
-         'config', 'branch.%s.remote' % working_branch],), 'origin'),
-      ((['git', 'rev-list', '^' + fake_ancestor,
-         'refs/remotes/origin/master'],), ''),
-       ]
+        ((['git', 'rev-parse', '--verify', diff_base], ), fake_ancestor),
+        ((['git', 'merge-base', fake_ancestor, 'HEAD'], ), fake_ancestor),
+        ((['git', 'rev-list', f'^{fake_ancestor}', 'HEAD'], ), fake_cl),
+        ((['git', 'config', 'gitcl.remotebranch'], ), (('', None), 1)),
+        (
+            (['git', 'config', f'branch.{working_branch}.merge'], ),
+            'refs/heads/master',
+        ),
+        ((['git', 'config', f'branch.{working_branch}.remote'], ), 'origin'),
+        (
+            ([
+                'git',
+                'rev-list',
+                f'^{fake_ancestor}',
+                'refs/remotes/origin/master',
+            ], ),
+            '',
+        ),
+    ]
 
   @classmethod
   def _dcommit_calls_1(cls):
@@ -613,21 +628,24 @@ class TestGitCl(TestCase):
       ref_to_push = 'HEAD'
 
     calls += [
-        ((['git', 'rev-list', 'origin/master..' + ref_to_push],), ''),
-        ((['git', 'config', 'rietveld.cc'],), '')
-        ]
-    receive_pack = '--receive-pack=git receive-pack '
-    receive_pack += '--cc=joe@example.com'  # from watch list
+        ((['git', 'rev-list', f'origin/master..{ref_to_push}'], ), ''),
+        ((['git', 'config', 'rietveld.cc'], ), ''),
+    ]
+    receive_pack = '--receive-pack=git receive-pack ' + '--cc=joe@example.com'
     if reviewers:
       receive_pack += ' '
-      receive_pack += ' '.join(
-          '--reviewer=' + email for email in sorted(reviewers))
+      receive_pack += ' '.join(f'--reviewer={email}' for email in sorted(reviewers))
     receive_pack += ''
-    calls += [
-        ((['git',
-           'push', receive_pack, 'origin', ref_to_push + ':refs/for/master'],),
-         '')
-        ]
+    calls += [(
+        ([
+            'git',
+            'push',
+            receive_pack,
+            'origin',
+            f'{ref_to_push}:refs/for/master',
+        ], ),
+        '',
+    )]
     if squash:
       calls += [
           ((['git', 'rev-parse', 'HEAD'],), 'abcdef0123456789'),
@@ -689,6 +707,7 @@ class TestGitCl(TestCase):
       keyvals['GERRIT_HOST'] = 'gerrit.chromium.org'
       keyvals['GERRIT_PORT'] = '29418'
       return keyvals
+
     self.mock(git_cl.gclient_utils, 'ParseCodereviewSettingsContent',
               ParseCodereviewSettingsContent)
     self.mock(git_cl.os, 'access', self._mocked_call)
@@ -698,13 +717,12 @@ class TestGitCl(TestCase):
       if not path.startswith(os.path.sep):
         return os.path.join(src_dir, path)
       return path
+
     self.mock(git_cl.os.path, 'abspath', AbsPath)
     commit_msg_path = os.path.join(src_dir, '.git', 'hooks', 'commit-msg')
     def Exists(path):
-      if path == commit_msg_path:
-        return False
-      # others paths, such as /usr/share/locale/....
-      return True
+      return path != commit_msg_path
+
     self.mock(git_cl.os.path, 'exists', Exists)
     self.mock(git_cl, 'urlretrieve', self._mocked_call)
     self.mock(git_cl, 'hasSheBang', self._mocked_call)

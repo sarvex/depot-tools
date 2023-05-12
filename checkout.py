@@ -44,10 +44,10 @@ def get_code_review_setting(path, key,
   try:
     settings_file = open(os.path.join(path, codereview_settings_file), 'r')
     try:
-      for line in settings_file.readlines():
+      for line in settings_file:
         if not line or line.startswith('#'):
           continue
-        if not ':' in line:
+        if ':' not in line:
           # Invalid file.
           return None
         k, v = line.split(':', 1)
@@ -63,10 +63,8 @@ def align_stdout(stdout):
   """Returns the aligned output of multiple stdouts."""
   output = ''
   for item in stdout:
-    item = item.strip()
-    if not item:
-      continue
-    output += ''.join('  %s\n' % line for line in item.splitlines())
+    if item := item.strip():
+      output += ''.join('  %s\n' % line for line in item.splitlines())
   return output
 
 
@@ -85,11 +83,11 @@ class PatchApplicationFailed(Exception):
   def __str__(self):
     out = []
     if self.filename:
-      out.append('Failed to apply patch for %s:' % self.filename)
+      out.append(f'Failed to apply patch for {self.filename}:')
     if self.status:
       out.append(self.status)
     if self.patch:
-      out.append('Patch: %s' % self.patch.dump())
+      out.append(f'Patch: {self.patch.dump()}')
     return '\n'.join(out)
 
 
@@ -326,7 +324,7 @@ class SvnMixIn(object):
       k, v = line.split(':', 1)
       k = k.strip().lower()
       v = v.strip()
-      assert not k in values
+      assert k not in values
       values[k] = v
     return values.get(key, None)
 
@@ -346,8 +344,7 @@ class SvnCheckout(CheckoutBase, SvnMixIn):
     # Will checkout if the directory is not present.
     assert self.svn_url
     if not os.path.isdir(self.project_path):
-      logging.info('Checking out %s in %s' %
-          (self.project_name, self.project_path))
+      logging.info(f'Checking out {self.project_name} in {self.project_path}')
     return self._revert(revision)
 
   def apply_patch(self, patches, post_processors=None, verbose=False):
@@ -474,7 +471,7 @@ class SvnCheckout(CheckoutBase, SvnMixIn):
               align_stdout([getattr(e, 'stdout', '')])))
 
   def commit(self, commit_message, user):
-    logging.info('Committing patch for %s' % user)
+    logging.info(f'Committing patch for {user}')
     assert self.commit_user
     assert isinstance(commit_message, unicode)
     handle, commit_filename = tempfile.mkstemp(text=True)
@@ -493,17 +490,17 @@ class SvnCheckout(CheckoutBase, SvnMixIn):
       args = ['commit', '--file', commit_filename]
       # realauthor is parsed by a server-side hook.
       if user and user != self.commit_user:
-        args.extend(['--with-revprop', 'realauthor=%s' % user])
+        args.extend(['--with-revprop', f'realauthor={user}'])
       out = self._check_output_svn(args)
     finally:
       os.remove(commit_filename)
     lines = filter(None, out.splitlines())
-    match = re.match(r'^Committed revision (\d+).$', lines[-1])
-    if not match:
+    if match := re.match(r'^Committed revision (\d+).$', lines[-1]):
+      return int(match[1])
+    else:
       raise PatchApplicationFailed(
           None,
           'Couldn\'t make sense out of svn commit message:\n' + out)
-    return int(match.group(1))
 
   def _revert(self, revision):
     """Reverts local modifications or checks out if the directory is not
@@ -521,8 +518,7 @@ class SvnCheckout(CheckoutBase, SvnMixIn):
       self._check_call_svn(['update', '--force'] + flags,
                            timeout=FETCH_TIMEOUT)
     else:
-      logging.info(
-          'Directory %s is not present, checking it out.' % self.project_path)
+      logging.info(f'Directory {self.project_path} is not present, checking it out.')
       self._check_call_svn(
           ['checkout', self.svn_url, self.project_path] + flags, cwd=None,
           timeout=FETCH_TIMEOUT)
@@ -545,7 +541,7 @@ class SvnCheckout(CheckoutBase, SvnMixIn):
     # the order specified.
     try:
       out = self._check_output_svn(
-          ['log', '-q', self.svn_url, '-r', '%s:%s' % (rev1, rev2)])
+          ['log', '-q', self.svn_url, '-r', f'{rev1}:{rev2}'])
     except subprocess.CalledProcessError:
       return None
     # Ignore the '----' lines.
@@ -587,8 +583,7 @@ class GitCheckout(CheckoutBase):
       # Throw away all uncommitted changes in the existing checkout.
       self._check_call_git(['checkout', self.remote_branch])
       self._check_call_git(
-          ['reset', '--hard', '--quiet',
-           '%s/%s' % (self.remote, self.remote_branch)])
+          ['reset', '--hard', '--quiet', f'{self.remote}/{self.remote_branch}'])
 
     if revision:
       try:
@@ -618,12 +613,13 @@ class GitCheckout(CheckoutBase):
     #   A parameter <ref> without a colon is equivalent to <ref>: when
     #   pulling/fetching, so it merges <ref> into the current branch without
     #   storing the remote branch anywhere locally.
-    remote_tracked_path = 'refs/remotes/%s/%s' % (
-        self.remote, self.remote_branch)
-    self._check_call_git(
-        ['pull', self.remote,
-         '%s:%s' % (self.remote_branch, remote_tracked_path),
-         '--quiet'])
+    remote_tracked_path = f'refs/remotes/{self.remote}/{self.remote_branch}'
+    self._check_call_git([
+        'pull',
+        self.remote,
+        f'{self.remote_branch}:{remote_tracked_path}',
+        '--quiet',
+    ])
 
   def _get_head_commit_hash(self):
     """Gets the current revision (in unicode) from the local branch."""
@@ -736,13 +732,16 @@ class GitCheckout(CheckoutBase):
       # TODO(rmistry): Do not need the below if user is already in
       #                "Name <email>" format.
       name = user.split('@')[0]
-      commit_cmd.extend(['--author', '%s <%s>' % (name, user)])
+      commit_cmd.extend(['--author', f'{name} <{user}>'])
     self._check_call_git(commit_cmd)
 
     # Push to the remote repository.
-    self._check_call_git(
-        ['push', 'origin', '%s:%s' % (self.working_branch, self.remote_branch),
-         '--quiet'])
+    self._check_call_git([
+        'push',
+        'origin',
+        f'{self.working_branch}:{self.remote_branch}',
+        '--quiet',
+    ])
     # Get the revision after the push.
     revision = self._get_head_commit_hash()
     # Switch back to the remote_branch and sync it.
@@ -776,22 +775,17 @@ class GitCheckout(CheckoutBase):
     """Returns the list of branches and the active one."""
     out = self._check_output_git(['branch']).splitlines(False)
     branches = [l[2:] for l in out]
-    active = None
-    for l in out:
-      if l.startswith('*'):
-        active = l[2:]
-        break
+    active = next((l[2:] for l in out if l.startswith('*')), None)
     return branches, active
 
   def revisions(self, rev1, rev2):
     """Returns the number of actual commits between both hash."""
     self._fetch_remote()
 
-    rev2 = rev2 or '%s/%s' % (self.remote, self.remote_branch)
+    rev2 = rev2 or f'{self.remote}/{self.remote_branch}'
     # Revision range is ]rev1, rev2] and ordering matters.
     try:
-      out = self._check_output_git(
-          ['log', '--format="%H"' , '%s..%s' % (rev1, rev2)])
+      out = self._check_output_git(['log', '--format="%H"', f'{rev1}..{rev2}'])
     except subprocess.CalledProcessError:
       return None
     return len(out.splitlines())
@@ -822,8 +816,7 @@ class ReadOnlyCheckout(object):
         patches, post_processors or self.post_processors, verbose)
 
   def commit(self, message, user):  # pylint: disable=R0201
-    logging.info('Would have committed for %s with message: %s' % (
-        user, message))
+    logging.info(f'Would have committed for {user} with message: {message}')
     return 'FAKE'
 
   def revisions(self, rev1, rev2):

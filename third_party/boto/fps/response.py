@@ -2,14 +2,19 @@ from decimal import Decimal
 
 
 def ResponseFactory(action):
+
+
+
     class FPSResponse(Response):
         _action = action
-        _Result = globals().get(action + 'Result', ResponseElement)
+        _Result = globals().get(f'{action}Result', ResponseElement)
 
         # due to nodes receiving their closing tags
         def endElement(self, name, value, connection):
-            if name != action + 'Response':
+            if name != f'{action}Response':
                 Response.endElement(self, name, value, connection)
+
+
     return FPSResponse
 
 
@@ -45,7 +50,7 @@ class Response(ResponseElement):
     def startElement(self, name, attrs, connection):
         if name == 'ResponseMetadata':
             setattr(self, name, ResponseElement(name=name))
-        elif name == self._action + 'Result':
+        elif name == f'{self._action}Result':
             setattr(self, name, self._Result(name=name))
         else:
             return ResponseElement.startElement(self, name, attrs, connection)

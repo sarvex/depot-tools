@@ -75,13 +75,11 @@ class StorageUri(object):
 
     def _check_bucket_uri(self, function_name):
         if issubclass(type(self), BucketStorageUri) and not self.bucket_name:
-            raise InvalidUriError(
-                '%s on bucket-less URI (%s)' % (function_name, self.uri))
+            raise InvalidUriError(f'{function_name} on bucket-less URI ({self.uri})')
 
     def _check_object_uri(self, function_name):
         if issubclass(type(self), BucketStorageUri) and not self.object_name:
-            raise InvalidUriError('%s on object-less URI (%s)' %
-                                  (function_name, self.uri))
+            raise InvalidUriError(f'{function_name} on object-less URI ({self.uri})')
 
     def _warn_about_args(self, function_name, **args):
         for arg in args:
@@ -114,7 +112,7 @@ class StorageUri(object):
             'suppress_consec_slashes' not in connection_args):
             connection_args['suppress_consec_slashes'] = (
                 self.suppress_consec_slashes)
-        connection_args.update(kwargs)
+        connection_args |= kwargs
         if not self.connection:
             if self.scheme in self.provider_pool:
                 self.connection = self.provider_pool[self.scheme]
@@ -134,8 +132,7 @@ class StorageUri(object):
                 from boto.file.connection import FileConnection
                 self.connection = FileConnection(self)
             else:
-                raise InvalidUriError('Unrecognized scheme "%s"' %
-                                      self.scheme)
+                raise InvalidUriError(f'Unrecognized scheme "{self.scheme}"')
         self.connection.debug = self.debug
         return self.connection
 
@@ -282,23 +279,20 @@ class BucketStorageUri(StorageUri):
         self._build_uri_strings()
 
     def _build_uri_strings(self):
-      if self.bucket_name and self.object_name:
-          self.versionless_uri = '%s://%s/%s' % (self.scheme, self.bucket_name,
-                                                 self.object_name)
-          if self.generation:
-              self.version_specific_uri = '%s#%s' % (self.versionless_uri,
-                                                     self.generation)
-          elif self.version_id:
-              self.version_specific_uri = '%s#%s' % (
-                  self.versionless_uri, self.version_id)
-          if self.is_version_specific:
-              self.uri = self.version_specific_uri
-          else:
-              self.uri = self.versionless_uri
-      elif self.bucket_name:
-          self.uri = ('%s://%s/' % (self.scheme, self.bucket_name))
-      else:
-          self.uri = ('%s://' % self.scheme)
+        if self.bucket_name and self.object_name:
+            self.versionless_uri = f'{self.scheme}://{self.bucket_name}/{self.object_name}'
+            if self.generation:
+                self.version_specific_uri = f'{self.versionless_uri}#{self.generation}'
+            elif self.version_id:
+                self.version_specific_uri = f'{self.versionless_uri}#{self.version_id}'
+            if self.is_version_specific:
+                self.uri = self.version_specific_uri
+            else:
+                self.uri = self.versionless_uri
+        elif self.bucket_name:
+            self.uri = f'{self.scheme}://{self.bucket_name}/'
+        else:
+            self.uri = f'{self.scheme}://'
 
     def _update_from_key(self, key):
       self._update_from_values(
@@ -358,16 +352,9 @@ class BucketStorageUri(StorageUri):
         @param key: key for the new StorageUri to represent
         """
         self._check_bucket_uri('clone_replace_key')
-        version_id = None
-        generation = None
-        is_latest = False
-        if hasattr(key, 'version_id'):
-            version_id = key.version_id
-        if hasattr(key, 'generation'):
-            generation = key.generation
-        if hasattr(key, 'is_latest'):
-            is_latest = key.is_latest
-
+        version_id = key.version_id if hasattr(key, 'version_id') else None
+        generation = key.generation if hasattr(key, 'generation') else None
+        is_latest = key.is_latest if hasattr(key, 'is_latest') else False
         return BucketStorageUri(
                 key.provider.get_provider_name(),
                 bucket_name=key.bucket.name,
@@ -500,7 +487,7 @@ class BucketStorageUri(StorageUri):
         False for bucket subdirs; providing bucket subdir semantics needs to
         be done by the caller (like gsutil does).
         """
-        return bool(not self.object_name)
+        return not self.object_name
 
     def names_singleton(self):
         """Returns True if this URI names a file or object."""
@@ -512,11 +499,11 @@ class BucketStorageUri(StorageUri):
 
     def names_provider(self):
         """Returns True if this URI names a provider."""
-        return bool(not self.bucket_name)
+        return not self.bucket_name
 
     def names_bucket(self):
         """Returns True if this URI names a bucket."""
-        return bool(self.bucket_name) and bool(not self.object_name)
+        return bool(self.bucket_name) and not self.object_name
 
     def names_file(self):
         """Returns True if this URI names a file."""
@@ -707,10 +694,11 @@ class BucketStorageUri(StorageUri):
     def set_website_config(self, main_page_suffix=None, error_key=None,
                            validate=False, headers=None):
         bucket = self.get_bucket(validate, headers)
-        if not (main_page_suffix or error_key):
-            bucket.delete_website_configuration(headers)
-        else:
+        if main_page_suffix or error_key:
             bucket.configure_website(main_page_suffix, error_key, headers)
+
+        else:
+            bucket.delete_website_configuration(headers)
 
     def get_website_config(self, validate=False, headers=None):
         bucket = self.get_bucket(validate, headers)
@@ -733,12 +721,12 @@ class BucketStorageUri(StorageUri):
                                                        headers=headers)
 
     def exists(self, headers=None):
-      """Returns True if the object exists or False if it doesn't"""
-      if not self.object_name:
-        raise InvalidUriError('exists on object-less URI (%s)' % self.uri)
-      bucket = self.get_bucket()
-      key = bucket.get_key(self.object_name, headers=headers)
-      return bool(key)
+        """Returns True if the object exists or False if it doesn't"""
+        if not self.object_name:
+            raise InvalidUriError(f'exists on object-less URI ({self.uri})')
+        bucket = self.get_bucket()
+        key = bucket.get_key(self.object_name, headers=headers)
+        return bool(key)
 
 class FileStorageUri(StorageUri):
     """
@@ -766,7 +754,7 @@ class FileStorageUri(StorageUri):
         self.scheme = 'file'
         self.bucket_name = ''
         self.object_name = object_name
-        self.uri = 'file://' + object_name
+        self.uri = f'file://{object_name}'
         self.debug = debug
         self.stream = is_stream
 
@@ -797,9 +785,7 @@ class FileStorageUri(StorageUri):
 
     def names_directory(self):
         """Returns True if this URI names a directory."""
-        if self.stream:
-            return False
-        return os.path.isdir(self.object_name)
+        return False if self.stream else os.path.isdir(self.object_name)
 
     def names_provider(self):
         """Returns True if this URI names a provider."""

@@ -43,24 +43,23 @@ def get_md5(filename):
   md5_calculator = hashlib.md5()
   with open(filename, 'rb') as f:
     while True:
-      chunk = f.read(1024*1024)
-      if not chunk:
+      if chunk := f.read(1024 * 1024):
+        md5_calculator.update(chunk)
+      else:
         break
-      md5_calculator.update(chunk)
   return md5_calculator.hexdigest()
 
 
 def get_md5_cached(filename):
   """Don't calculate the MD5 if we can find a .md5 file."""
   # See if we can find an existing MD5 sum stored in a file.
-  if os.path.exists('%s.md5' % filename):
-    with open('%s.md5' % filename, 'rb') as f:
-      md5_match = re.search('([a-z0-9]{32})', f.read())
-      if md5_match:
-        return md5_match.group(1)
+  if os.path.exists(f'{filename}.md5'):
+    with open(f'{filename}.md5', 'rb') as f:
+      if md5_match := re.search('([a-z0-9]{32})', f.read()):
+        return md5_match[1]
   else:
     md5_hash = get_md5(filename)
-    with open('%s.md5' % filename, 'wb') as f:
+    with open(f'{filename}.md5', 'wb') as f:
       f.write(md5_hash)
     return md5_hash
 
@@ -72,19 +71,15 @@ def _upload_worker(
     filename, sha1_sum = upload_queue.get()
     if not filename:
       break
-    file_url = '%s/%s' % (base_url, sha1_sum)
+    file_url = f'{base_url}/{sha1_sum}'
     if gsutil.check_call('ls', file_url)[0] == 0 and not force:
       # File exists, check MD5 hash.
       _, out, _ = gsutil.check_call('ls', '-L', file_url)
-      etag_match = re.search('ETag:\s+([a-z0-9]{32})', out)
-      if etag_match:
-        remote_md5 = etag_match.group(1)
+      if etag_match := re.search('ETag:\s+([a-z0-9]{32})', out):
+        remote_md5 = etag_match[1]
         # Calculate the MD5 checksum to match it to Google Storage's ETag.
         with md5_lock:
-          if use_md5:
-            local_md5 = get_md5_cached(filename)
-          else:
-            local_md5 = get_md5(filename)
+          local_md5 = get_md5_cached(filename) if use_md5 else get_md5(filename)
         if local_md5 == remote_md5:
           stdout_queue.put(
               '%d> File %s already exists and MD5 matches, upload skipped' %
@@ -102,29 +97,28 @@ def _upload_worker(
 
     # Mark executable files with the header "x-goog-meta-executable: 1" which
     # the download script will check for to preserve the executable bit.
-    if not sys.platform.startswith('win'):
-      if os.stat(filename).st_mode & stat.S_IEXEC:
-        code, _, err = gsutil.check_call('setmeta', '-h',
-                                         'x-goog-meta-executable:1', file_url)
-        if code:
-          ret_codes.put(
-              (code,
-               'Encountered error on setting metadata on %s\n%s' %
-               (file_url, err)))
+    if (not sys.platform.startswith('win')
+        and os.stat(filename).st_mode & stat.S_IEXEC):
+      code, _, err = gsutil.check_call('setmeta', '-h',
+                                       'x-goog-meta-executable:1', file_url)
+      if code:
+        ret_codes.put(
+            (code,
+             'Encountered error on setting metadata on %s\n%s' %
+             (file_url, err)))
 
 
 def get_targets(args, parser, use_null_terminator):
   if not args:
     parser.error('Missing target.')
 
-  if len(args) == 1 and args[0] == '-':
-    # Take stdin as a newline or null seperated list of files.
-    if use_null_terminator:
-      return sys.stdin.read().split('\0')
-    else:
-      return sys.stdin.read().splitlines()
-  else:
+  if len(args) != 1 or args[0] != '-':
     return args
+  # Take stdin as a newline or null seperated list of files.
+  if use_null_terminator:
+    return sys.stdin.read().split('\0')
+  else:
+    return sys.stdin.read().splitlines()
 
 
 def upload_to_google_storage(
@@ -237,10 +231,11 @@ def main():
       if os.path.exists(path) and 'gsutil' in os.listdir(path):
         gsutil = Gsutil(os.path.join(path, 'gsutil'), boto_path=options.boto)
     if not gsutil:
-      parser.error('gsutil not found in %s, bad depot_tools checkout?' %
-                   GSUTIL_DEFAULT_PATH)
+      parser.error(
+          f'gsutil not found in {GSUTIL_DEFAULT_PATH}, bad depot_tools checkout?'
+      )
 
-  base_url = 'gs://%s' % options.bucket
+  base_url = f'gs://{options.bucket}'
 
   return upload_to_google_storage(
       input_filenames, base_url, gsutil, options.force, options.use_md5,

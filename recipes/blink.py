@@ -21,13 +21,14 @@ class Blink(recipe_util.Recipe):
       }
     }
     return {
-      'alias': {
-        'recipe': 'chromium',
-        'props': [
-          '--webkit_revision=ToT',
-          '--submodule_git_svn_spec=' + json.dumps(submodule_spec),
-        ],
-      },
+        'alias': {
+            'recipe':
+            'chromium',
+            'props': [
+                '--webkit_revision=ToT',
+                f'--submodule_git_svn_spec={json.dumps(submodule_spec)}',
+            ],
+        }
     }
 
   @staticmethod

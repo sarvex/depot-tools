@@ -15,7 +15,7 @@ class InfraInternal(recipe_util.Recipe):
   @staticmethod
   def fetch_spec(_props):
     def url(host, repo):
-      return 'https://%s.googlesource.com/%s.git' % (host, repo)
+      return f'https://{host}.googlesource.com/{repo}.git'
 
     spec = {
       'solutions': [

@@ -78,7 +78,7 @@ def get_solution(gclient_root, dep_path):
     if (dep_path.startswith(soln_relpath) or
         cwd.startswith(os.path.join(gclient_root, soln_relpath))):
       return soln
-  assert False, 'Could not determine the parent project for %s' % dep_path
+  assert False, f'Could not determine the parent project for {dep_path}'
 
 
 def is_git_hash(revision):
@@ -101,10 +101,9 @@ def get_svn_revision(dep_path, git_revision):
   p = Popen(['git', 'log', '-n', '1', '--pretty=format:%B', git_revision],
             stdout=PIPE, cwd=dep_path)
   (log, _) = p.communicate()
-  assert p.returncode == 0, 'git log %s failed.' % git_revision
+  assert p.returncode == 0, f'git log {git_revision} failed.'
   for line in reversed(log.splitlines()):
-    m = GIT_SVN_ID_RE.match(line.strip())
-    if m:
+    if m := GIT_SVN_ID_RE.match(line.strip()):
       return m.group(1)
   return None
 
@@ -192,11 +191,10 @@ def ast_err_msg(node):
 def find_deps_section(deps_ast, section):
   """Find a top-level section of the DEPS file in the AST."""
   try:
-    result = [n.value for n in deps_ast.body if
-              n.__class__ is ast.Assign and
-              n.targets[0].__class__ is ast.Name and
-              n.targets[0].id == section][0]
-    return result
+    return [
+        n.value for n in deps_ast.body if n.__class__ is ast.Assign
+        and n.targets[0].__class__ is ast.Name and n.targets[0].id == section
+    ][0]
   except IndexError:
     return None
 
@@ -206,8 +204,7 @@ def find_dict_index(dict_node, key):
   assert dict_node.__class__ is ast.Dict, ast_err_msg(dict_node)
   indices = [i for i, n in enumerate(dict_node.keys) if
              n.__class__ is ast.Str and n.s == key]
-  assert len(indices) < 2, (
-      'Found redundant dict entries for key "%s"' % key)
+  assert len(indices) < 2, f'Found redundant dict entries for key "{key}"'
   return indices[0] if indices else None
 
 
@@ -262,8 +259,8 @@ def update_var(deps_lines, deps_ast, var_name, git_revision):
   vars_node = find_deps_section(deps_ast, 'vars')
   assert vars_node, 'Could not find "vars" section of DEPS file.'
   var_idx = find_dict_index(vars_node, var_name)
-  assert var_idx is not None, (
-      'Could not find definition of "%s" var in DEPS file.' % var_name)
+  assert (var_idx is not None
+          ), f'Could not find definition of "{var_name}" var in DEPS file.'
   val_node = vars_node.values[var_idx]
   return update_node(deps_lines, deps_ast, val_node, git_revision)
 
@@ -279,7 +276,7 @@ def generate_commit_message(deps_section, dep_path, dep_name, new_rev):
     url = url[:-4]
   old_rev_short = short_rev(old_rev, dep_path)
   new_rev_short = short_rev(new_rev, dep_path)
-  url += '/+log/%s..%s' % (old_rev_short, new_rev_short)
+  url += f'/+log/{old_rev_short}..{new_rev_short}'
   try:
     old_svn_rev = get_svn_revision(dep_path, old_rev)
     new_svn_rev = get_svn_revision(dep_path, new_rev)
@@ -288,7 +285,7 @@ def generate_commit_message(deps_section, dep_path, dep_name, new_rev):
     old_svn_rev = new_svn_rev = None
   svn_range_str = ''
   if old_svn_rev and new_svn_rev:
-    svn_range_str = ' (svn %s:%s)' % (old_svn_rev, new_svn_rev)
+    svn_range_str = f' (svn {old_svn_rev}:{new_svn_rev})'
   return dedent(ROLL_DESCRIPTION_STR % {
     'dep_path': shorten_dep_path(dep_name),
     'before_rev': old_rev_short,
@@ -301,7 +298,7 @@ def update_deps_entry(deps_lines, deps_ast, value_node, new_rev, comment):
   line_idx = update_node(deps_lines, deps_ast, value_node, new_rev)
   (content, _, _) = deps_lines[line_idx].partition('#')
   if comment:
-    deps_lines[line_idx] = '%s # %s' % (content.rstrip(), comment)
+    deps_lines[line_idx] = f'{content.rstrip()} # {comment}'
   else:
     deps_lines[line_idx] = content.rstrip()
 

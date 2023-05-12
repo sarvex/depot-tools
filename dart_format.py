@@ -34,7 +34,7 @@ def FindDartFmtToolInChromiumTree():
   dartfmt_path = os.path.join(primary_solution_path, 'third_party', 'dart-sdk',
                               'dart-sdk', 'bin', 'dartfmt')
   if not os.path.exists(dartfmt_path):
-    raise NotFoundError('File does not exist: %s' % dartfmt_path)
+    raise NotFoundError(f'File does not exist: {dartfmt_path}')
   return dartfmt_path
 
 

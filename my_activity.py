@@ -186,8 +186,8 @@ def get_week_of(date):
 
 def get_yes_or_no(msg):
   while True:
-    response = raw_input(msg + ' yes/no [no] ')
-    if response == 'y' or response == 'yes':
+    response = raw_input(f'{msg} yes/no [no] ')
+    if response in ['y', 'yes']:
       return True
     elif not response or response == 'n' or response == 'no':
       return False
@@ -275,14 +275,10 @@ class MyActivity(object):
     if instance['supports_owner_modified_query']:
       query_modified_after = self.modified_after.strftime('%Y-%m-%d')
 
-    # Rietveld does not allow search by both created_before and modified_after.
-    # (And some instances don't allow search by both owner and modified_after)
-    owner_email = None
     reviewer_email = None
-    if owner:
-      owner_email = owner + '@' + instance['email_domain']
+    owner_email = f'{owner}@' + instance['email_domain'] if owner else None
     if reviewer:
-      reviewer_email = reviewer + '@' + instance['email_domain']
+      reviewer_email = f'{reviewer}@' + instance['email_domain']
     issues = remote.search(
         owner=owner_email,
         reviewer=reviewer_email,
@@ -306,16 +302,12 @@ class MyActivity(object):
     return issues
 
   def process_rietveld_issue(self, instance, issue):
-    ret = {}
-    ret['owner'] = issue['owner_email']
+    ret = {'owner': issue['owner_email']}
     ret['author'] = ret['owner']
 
     ret['reviewers'] = set(issue['reviewers'])
 
-    shorturl = instance['url']
-    if 'shorturl' in instance:
-      shorturl = instance['shorturl']
-
+    shorturl = instance['shorturl'] if 'shorturl' in instance else instance['url']
     ret['review_url'] = 'http://%s/%d' % (shorturl, issue['issue'])
 
     # Rietveld sometimes has '\r\n' instead of '\n'.
@@ -331,10 +323,11 @@ class MyActivity(object):
   def process_rietveld_replies(replies):
     ret = []
     for reply in replies:
-      r = {}
-      r['author'] = reply['sender']
-      r['created'] = datetime_from_rietveld(reply['date'])
-      r['content'] = ''
+      r = {
+          'author': reply['sender'],
+          'created': datetime_from_rietveld(reply['date']),
+          'content': '',
+      }
       ret.append(r)
     return ret
 
@@ -367,10 +360,10 @@ class MyActivity(object):
       return []
 
   def gerrit_search(self, instance, owner=None, reviewer=None):
-    max_age = datetime.today() - self.modified_after
+    max_age = datetime.now() - self.modified_after
     max_age = max_age.days * 24 * 3600 + max_age.seconds
-    user_filter = 'owner:%s' % owner if owner else 'reviewer:%s' % reviewer
-    filters = ['-age:%ss' % max_age, user_filter]
+    user_filter = f'owner:{owner}' if owner else f'reviewer:{reviewer}'
+    filters = [f'-age:{max_age}s', user_filter]
 
     # Determine the gerrit interface to use: SSH or REST API:
     if 'host' in instance:
@@ -386,16 +379,12 @@ class MyActivity(object):
 
     # TODO(cjhopman): should we filter abandoned changes?
     issues = filter(self.filter_issue, issues)
-    issues = sorted(issues, key=lambda i: i['modified'], reverse=True)
-
-    return issues
+    return sorted(issues, key=lambda i: i['modified'], reverse=True)
 
   def process_gerrit_ssh_issue(self, instance, issue):
-    ret = {}
-    ret['review_url'] = issue['url']
+    ret = {'review_url': issue['url']}
     if 'shorturl' in instance:
-      ret['review_url'] = 'http://%s/%s' % (instance['shorturl'],
-                                            issue['number'])
+      ret['review_url'] = f"http://{instance['shorturl']}/{issue['number']}"
     ret['header'] = issue['subject']
     ret['owner'] = issue['owner']['email']
     ret['author'] = ret['owner']
@@ -405,30 +394,25 @@ class MyActivity(object):
       ret['replies'] = self.process_gerrit_ssh_issue_replies(issue['comments'])
     else:
       ret['replies'] = []
-    ret['reviewers'] = set(r['author'] for r in ret['replies'])
+    ret['reviewers'] = {r['author'] for r in ret['replies']}
     ret['reviewers'].discard(ret['author'])
     return ret
 
   @staticmethod
   def process_gerrit_ssh_issue_replies(replies):
-    ret = []
     replies = filter(lambda r: 'email' in r['reviewer'], replies)
-    for reply in replies:
-      ret.append({
+    return [{
         'author': reply['reviewer']['email'],
         'created': datetime.fromtimestamp(reply['timestamp']),
         'content': '',
-      })
-    return ret
+    } for reply in replies]
 
   def process_gerrit_rest_issue(self, instance, issue):
-    ret = {}
-    ret['review_url'] = 'https://%s/%s' % (instance['url'], issue['_number'])
+    ret = {'review_url': f"https://{instance['url']}/{issue['_number']}"}
     if 'shorturl' in instance:
       # TODO(deymo): Move this short link to https once crosreview.com supports
       # it.
-      ret['review_url'] = 'http://%s/%s' % (instance['shorturl'],
-                                            issue['_number'])
+      ret['review_url'] = f"http://{instance['shorturl']}/{issue['_number']}"
     ret['header'] = issue['subject']
     ret['owner'] = issue['owner']['email']
     ret['author'] = ret['owner']
@@ -438,22 +422,19 @@ class MyActivity(object):
       ret['replies'] = self.process_gerrit_rest_issue_replies(issue['messages'])
     else:
       ret['replies'] = []
-    ret['reviewers'] = set(r['author'] for r in ret['replies'])
+    ret['reviewers'] = {r['author'] for r in ret['replies']}
     ret['reviewers'].discard(ret['author'])
     return ret
 
   @staticmethod
   def process_gerrit_rest_issue_replies(replies):
-    ret = []
     replies = filter(lambda r: 'author' in r and 'email' in r['author'],
         replies)
-    for reply in replies:
-      ret.append({
+    return [{
         'author': reply['author']['email'],
         'created': datetime_from_gerrit(reply['date']),
         'content': reply['message'],
-      })
-    return ret
+    } for reply in replies]
 
   def google_code_issue_search(self, instance):
     time_format = '%Y-%m-%dT%T'
@@ -497,8 +478,7 @@ class MyActivity(object):
     return issues
 
   def process_google_code_issue(self, project, issue):
-    ret = {}
-    ret['created'] = datetime_from_google_code(issue['published']['$t'])
+    ret = {'created': datetime_from_google_code(issue['published']['$t'])}
     ret['modified'] = datetime_from_google_code(issue['updated']['$t'])
 
     ret['owner'] = ''
@@ -550,8 +530,7 @@ class MyActivity(object):
 
     ret = []
     for entry in replies['feed']['entry']:
-      e = {}
-      e['created'] = datetime_from_google_code(entry['published']['$t'])
+      e = {'created': datetime_from_google_code(entry['published']['$t'])}
       e['content'] = entry['content']['$t']
       e['author'] = entry['author'][0]['name']['$t']
       ret.append(e)
@@ -612,6 +591,7 @@ class MyActivity(object):
   def filter_issue(self, issue, should_filter_by_user=True):
     def maybe_filter_username(email):
       return not should_filter_by_user or username(email) == self.user
+
     if (maybe_filter_username(issue['author']) and
         self.filter_modified(issue['created'])):
       return True
@@ -624,14 +604,14 @@ class MyActivity(object):
         if not should_filter_by_user:
           break
         if (username(reply['author']) == self.user
-            or (self.user + '@') in reply['content']):
+            or f'{self.user}@' in reply['content']):
           break
     else:
       return False
     return True
 
   def filter_modified(self, modified):
-    return self.modified_after < modified and modified < self.modified_before
+    return self.modified_after < modified < self.modified_before
 
   def auth_for_changes(self):
     #TODO(cjhopman): Move authentication check for getting changes here.
@@ -643,8 +623,8 @@ class MyActivity(object):
     pass
 
   def auth_for_issues(self):
-    self.google_code_auth_token = (
-        get_auth_token(self.options.local_user + '@chromium.org'))
+    self.google_code_auth_token = get_auth_token(
+        f'{self.options.local_user}@chromium.org')
 
   def get_changes(self):
     for instance in rietveld_instances:
@@ -665,7 +645,7 @@ class MyActivity(object):
 
     for instance in gerrit_instances:
       reviews = self.gerrit_search(instance, reviewer=self.user)
-      reviews = filter(lambda r: not username(r['owner']) == self.user, reviews)
+      reviews = filter(lambda r: username(r['owner']) != self.user, reviews)
       self.reviews += reviews
 
   def print_reviews(self):

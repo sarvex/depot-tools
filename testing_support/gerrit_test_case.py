@@ -139,16 +139,17 @@ class GerritTestCase(unittest.TestCase):
         credential_file=os.path.join(gerrit_dir, 'tmp', '.git-credentials'),
         gerrit_dir=gerrit_dir,
         gerrit_exe=gerrit_exe,
-        gerrit_host='localhost:%s' % http_port,
+        gerrit_host=f'localhost:{http_port}',
         gerrit_pid=gerrit_pid,
-        gerrit_url='http://localhost:%s' % http_port,
+        gerrit_url=f'http://localhost:{http_port}',
         git_dir=os.path.join(gerrit_dir, 'git'),
-        git_host='%s/git' % gerrit_dir,
-        git_url='file://%s/git' % gerrit_dir,
+        git_host=f'{gerrit_dir}/git',
+        git_url=f'file://{gerrit_dir}/git',
         http_port=http_port,
         netrc_file=os.path.join(gerrit_dir, 'tmp', '.netrc'),
         ssh_ident=os.path.join(gerrit_dir, 'tmp', 'id_rsa'),
-        ssh_port=ssh_port,)
+        ssh_port=ssh_port,
+    )
 
   @classmethod
   def setUpClass(cls):
@@ -205,7 +206,7 @@ class GerritTestCase(unittest.TestCase):
         'submit_type': submit_type,
         'owners': owners,
     }
-    path = 'projects/%s' % urllib.quote(name, '')
+    path = f"projects/{urllib.quote(name, '')}"
     conn = gerrit_util.CreateHttpConn(
         cls.gerrit_instance.gerrit_host, path, reqtype='PUT', body=body)
     jmsg = gerrit_util.ReadHttpJsonResponse(conn, expect_status=201)
@@ -216,9 +217,14 @@ class GerritTestCase(unittest.TestCase):
     config_path = os.path.join(clone_path, '.git', 'config')
     cls.check_call(
         ['git', 'config', '--file', config_path, 'user.email', cls.TEST_EMAIL])
-    cls.check_call(
-        ['git', 'config', '--file', config_path, 'credential.helper',
-         'store --file=%s' % cls.gerrit_instance.credential_file])
+    cls.check_call([
+        'git',
+        'config',
+        '--file',
+        config_path,
+        'credential.helper',
+        f'store --file={cls.gerrit_instance.credential_file}',
+    ])
 
   @classmethod
   def _CloneProject(cls, name, path):
@@ -274,12 +280,10 @@ class GerritTestCase(unittest.TestCase):
     sha1 = None
     change_id = None
     for line in log_proc.splitlines():
-      match = cls.COMMIT_RE.match(line)
-      if match:
+      if match := cls.COMMIT_RE.match(line):
         sha1 = match.group(1)
         continue
-      match = cls.CHANGEID_RE.match(line)
-      if match:
+      if match := cls.CHANGEID_RE.match(line):
         change_id = match.group(1)
         continue
     assert sha1
@@ -294,8 +298,8 @@ class GerritTestCase(unittest.TestCase):
   @classmethod
   def _UploadChange(cls, clone_path, branch='master', remote='origin'):
     """Create a gerrit CL from the HEAD of a git checkout."""
-    cls.check_call(
-        ['git', 'push', remote, 'HEAD:refs/for/%s' % branch], cwd=clone_path)
+    cls.check_call(['git', 'push', remote, f'HEAD:refs/for/{branch}'],
+                   cwd=clone_path)
 
   def uploadChange(self, clone_path, branch='master', remote='origin'):
     """Create a gerrit CL from the HEAD of a git checkout."""
@@ -305,9 +309,8 @@ class GerritTestCase(unittest.TestCase):
   @classmethod
   def _PushBranch(cls, clone_path, branch='master'):
     """Push a branch directly to gerrit, bypassing code review."""
-    cls.check_call(
-        ['git', 'push', 'origin', 'HEAD:refs/heads/%s' % branch],
-        cwd=clone_path)
+    cls.check_call(['git', 'push', 'origin', f'HEAD:refs/heads/{branch}'],
+                   cwd=clone_path)
 
   def pushBranch(self, clone_path, branch='master'):
     """Push a branch directly to gerrit, bypassing code review."""
@@ -319,17 +322,25 @@ class GerritTestCase(unittest.TestCase):
                     password=None, groups=None):
     """Create a new user account on gerrit."""
     username = email.partition('@')[0]
-    gerrit_cmd = 'gerrit create-account %s --full-name "%s" --email %s' % (
-        username, name, email)
+    gerrit_cmd = (
+        f'gerrit create-account {username} --full-name "{name}" --email {email}')
     if password:
-      gerrit_cmd += ' --http-password "%s"' % password
+      gerrit_cmd += f' --http-password "{password}"'
     if groups:
-      gerrit_cmd += ' '.join(['--group %s' % x for x in groups])
-    ssh_cmd = ['ssh', '-p', cls.gerrit_instance.ssh_port,
-           '-i', cls.gerrit_instance.ssh_ident,
-           '-o', 'NoHostAuthenticationForLocalhost=yes',
-           '-o', 'StrictHostKeyChecking=no',
-           '%s@localhost' % cls.TEST_USERNAME, gerrit_cmd]
+      gerrit_cmd += ' '.join([f'--group {x}' for x in groups])
+    ssh_cmd = [
+        'ssh',
+        '-p',
+        cls.gerrit_instance.ssh_port,
+        '-i',
+        cls.gerrit_instance.ssh_ident,
+        '-o',
+        'NoHostAuthenticationForLocalhost=yes',
+        '-o',
+        'StrictHostKeyChecking=no',
+        f'{cls.TEST_USERNAME}@localhost',
+        gerrit_cmd,
+    ]
     cls.check_call(ssh_cmd)
 
   @classmethod
@@ -427,9 +438,9 @@ class RepoTestCase(GerritTestCase):
     # Create project repositories.
     for i in xrange(1, 5):
       proj = 'testproj%d' % i
-      cls.createProject('remotepath/%s' % proj)
+      cls.createProject(f'remotepath/{proj}')
       clone_path = os.path.join(gi.gerrit_dir, 'tmp', proj)
-      cls._CloneProject('remotepath/%s' % proj, clone_path)
+      cls._CloneProject(f'remotepath/{proj}', clone_path)
       cls._CreateCommit(clone_path)
       cls._PushBranch(clone_path, 'master')
 
@@ -447,9 +458,14 @@ class RepoTestCase(GerritTestCase):
       self._post_clone_bookkeeping(clone_path)
       # Tell 'repo upload' to upload this project without prompting.
       config_path = os.path.join(clone_path, '.git', 'config')
-      self.check_call(
-          ['git', 'config', '--file', config_path, 'review.%s.upload' %
-           self.gerrit_instance.gerrit_host, 'true'])
+      self.check_call([
+          'git',
+          'config',
+          '--file',
+          config_path,
+          f'review.{self.gerrit_instance.gerrit_host}.upload',
+          'true',
+      ])
 
   @classmethod
   def runRepo(cls, *args, **kwargs):
@@ -465,14 +481,15 @@ class RepoTestCase(GerritTestCase):
     cls.check_call(*args, **kwargs)
 
   def uploadChange(self, clone_path, branch='master', remote='origin'):
-    review_host = self.check_output(
-        ['git', 'config', 'remote.%s.review' % remote],
-        cwd=clone_path).strip()
+    review_host = self.check_output(['git', 'config', f'remote.{remote}.review'],
+                                    cwd=clone_path).strip()
     assert(review_host)
     projectname = self.check_output(
-        ['git', 'config', 'remote.%s.projectname' % remote],
+        ['git', 'config', f'remote.{remote}.projectname'],
         cwd=clone_path).strip()
     assert(projectname)
     GerritTestCase._UploadChange(
-        clone_path, branch=branch, remote='%s://%s/%s' % (
-            gerrit_util.GERRIT_PROTOCOL, review_host, projectname))
+        clone_path,
+        branch=branch,
+        remote=f'{gerrit_util.GERRIT_PROTOCOL}://{review_host}/{projectname}',
+    )

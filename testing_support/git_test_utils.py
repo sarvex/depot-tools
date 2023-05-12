@@ -58,7 +58,7 @@ class OrderedSet(collections.MutableSet):
 
   def __repr__(self):
     if not self:
-      return '%s()' % (self.__class__.__name__,)
+      return f'{self.__class__.__name__}()'
     return '%s(%r)' % (self.__class__.__name__, list(self))
 
   def __reversed__(self):
@@ -148,13 +148,16 @@ class GitRepoSchema(object):
     is_root = True
     par_map = copy.deepcopy(self.par_map)
     while par_map:
-      empty_keys = set(k for k, v in par_map.iteritems() if not v)
-      assert empty_keys, 'Cycle detected! %s' % par_map
+      empty_keys = {k for k, v in par_map.iteritems() if not v}
+      assert empty_keys, f'Cycle detected! {par_map}'
 
       for k in sorted(empty_keys):
-        yield self.COMMIT(k, self.par_map[k],
-                          not any(k in v for v in self.par_map.itervalues()),
-                          is_root)
+        yield self.COMMIT(
+            k,
+            self.par_map[k],
+            all(k not in v for v in self.par_map.itervalues()),
+            is_root,
+        )
         del par_map[k]
       for v in par_map.itervalues():
         v.difference_update(empty_keys)
@@ -298,7 +301,7 @@ class GitRepo(object):
       if len(parents) > 1:
         self.git('merge', '--no-commit', '-q', *[self[x] for x in parents[1:]])
     else:
-      self.git('checkout', '--orphan', 'root_%s' % commit.name)
+      self.git('checkout', '--orphan', f'root_{commit.name}')
       self.git('rm', '-rf', '.')
 
     env = self.get_git_commit_env(commit_data)
@@ -325,28 +328,27 @@ class GitRepo(object):
       self.git('add', fname)
 
     rslt = self.git('commit', '--allow-empty', '-m', commit.name, env=env)
-    assert rslt.retcode == 0, 'Failed to commit %s' % str(commit)
+    assert rslt.retcode == 0, f'Failed to commit {str(commit)}'
     self.commit_map[commit.name] = self.git('rev-parse', 'HEAD').stdout.strip()
-    self.git('tag', 'tag_%s' % commit.name, self[commit.name])
+    self.git('tag', f'tag_{commit.name}', self[commit.name])
     if commit.is_branch:
-      self.git('branch', '-f', 'branch_%s' % commit.name, self[commit.name])
+      self.git('branch', '-f', f'branch_{commit.name}', self[commit.name])
 
   def get_git_commit_env(self, commit_data=None):
     commit_data = commit_data or {}
     env = {}
     for prefix in ('AUTHOR', 'COMMITTER'):
       for suffix in ('NAME', 'EMAIL', 'DATE'):
-        singleton = '%s_%s' % (prefix, suffix)
+        singleton = f'{prefix}_{suffix}'
         key = getattr(self, singleton)
         if key in commit_data:
           val = commit_data[key]
+        elif suffix == 'DATE':
+          val = self._date
+          self._date += datetime.timedelta(days=1)
         else:
-          if suffix == 'DATE':
-            val = self._date
-            self._date += datetime.timedelta(days=1)
-          else:
-            val = getattr(self, 'DEFAULT_%s' % singleton)
-        env['GIT_%s' % singleton] = str(val)
+          val = getattr(self, f'DEFAULT_{singleton}')
+        env[f'GIT_{singleton}'] = str(val)
     return env
 
 
@@ -452,7 +454,7 @@ class GitRepoSchemaTestBase(unittest.TestCase):
 
   @classmethod
   def getRepoContent(cls, commit):
-    return getattr(cls, 'COMMIT_%s' % commit, None)
+    return getattr(cls, f'COMMIT_{commit}', None)
 
   @classmethod
   def setUpClass(cls):

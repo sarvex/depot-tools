@@ -376,7 +376,7 @@ class InputApi(object):
     (and optionally directories) in the same directory as the current presubmit
     script, or subdirectories thereof.
     """
-    dir_with_slash = normpath("%s/" % self.PresubmitLocalPath())
+    dir_with_slash = normpath(f"{self.PresubmitLocalPath()}/")
     if len(dir_with_slash) == 1:
       dir_with_slash = ''
 
@@ -426,9 +426,10 @@ class InputApi(object):
       local_path = affected_file.LocalPath()
       for item in items:
         if self.re.match(item, local_path):
-          logging.debug("%s matched %s" % (item, local_path))
+          logging.debug(f"{item} matched {local_path}")
           return True
       return False
+
     return (Find(affected_file, white_list or self.DEFAULT_WHITE_LIST) and
             not Find(affected_file, black_list or self.DEFAULT_BLACK_LIST))
 
@@ -546,21 +547,21 @@ class _GitDiffCache(_DiffCache):
       current_diff = []
       keep_line_endings = True
       for x in unified_diff.splitlines(keep_line_endings):
-        match = file_marker.match(x)
-        if match:
+        if match := file_marker.match(x):
           # Marks the start of a new per-file section.
-          diffs[match.group('filename')] = current_diff = [x]
+          diffs[match['filename']] = current_diff = [x]
         elif x.startswith('diff --git'):
-          raise PresubmitFailure('Unexpected diff line: %s' % x)
+          raise PresubmitFailure(f'Unexpected diff line: {x}')
         else:
           current_diff.append(x)
 
-      self._diffs_by_file = dict(
-        (normpath(path), ''.join(diff)) for path, diff in diffs.items())
+      self._diffs_by_file = {
+          normpath(path): ''.join(diff)
+          for path, diff in diffs.items()
+      }
 
     if path not in self._diffs_by_file:
-      raise PresubmitFailure(
-          'Unified diff did not contain entry for file %s' % path)
+      raise PresubmitFailure(f'Unified diff did not contain entry for file {path}')
 
     return self._diffs_by_file[path]
 
@@ -581,7 +582,7 @@ class AffectedFile(object):
     self._cached_changed_contents = None
     self._cached_new_contents = None
     self._diff_cache = diff_cache
-    logging.debug('%s(%s)' % (self.__class__.__name__, self._path))
+    logging.debug(f'{self.__class__.__name__}({self._path})')
 
   def ServerPath(self):
     """Returns a path string that identifies the file in the SCM system.
@@ -638,11 +639,9 @@ class AffectedFile(object):
     if self._cached_new_contents is None:
       self._cached_new_contents = []
       if not self.IsDirectory():
-        try:
+        with contextlib.suppress(IOError):
           self._cached_new_contents = gclient_utils.FileRead(
               self.AbsoluteLocalPath(), 'rU').splitlines()
-        except IOError:
-          pass  # File not found?  That's fine; maybe it was deleted.
     return self._cached_new_contents[:]
 
   def ChangedContents(self):
@@ -662,8 +661,7 @@ class AffectedFile(object):
       return []
 
     for line in self.GenerateScmDiff().splitlines():
-      m = re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line)
-      if m:
+      if m := re.match(r'^@@ [0-9\,\+\-]+ \+([0-9]+)\,[0-9]+ @@', line):
         line_num = int(m.groups(1)[0])
         continue
       if line.startswith('+') and not line.startswith('++'):
@@ -711,7 +709,7 @@ class SvnAffectedFile(AffectedFile):
     return self._is_directory
 
   def Property(self, property_name):
-    if not property_name in self._properties:
+    if property_name not in self._properties:
       self._properties[property_name] = scm.SVN.GetFileProperty(
           self.LocalPath(), property_name, self._local_root).rstrip()
     return self._properties[property_name]
@@ -750,16 +748,11 @@ class GitAffectedFile(AffectedFile):
   def IsDirectory(self):
     if self._is_directory is None:
       path = self.AbsoluteLocalPath()
-      if os.path.exists(path):
-        # Retrieve directly from the file system; it is much faster than
-        # querying subversion, especially on Windows.
-        self._is_directory = os.path.isdir(path)
-      else:
-        self._is_directory = False
+      self._is_directory = os.path.isdir(path) if os.path.exists(path) else False
     return self._is_directory
 
   def Property(self, property_name):
-    if not property_name in self._properties:
+    if property_name not in self._properties:
       raise NotImplementedError('TODO(maruel) Implement.')
     return self._properties[property_name]
 
@@ -848,8 +841,7 @@ class Change(object):
     description_without_tags = []
     self.tags = {}
     for line in self._full_description.splitlines():
-      m = self.TAG_LINE_RE.match(line)
-      if m:
+      if m := self.TAG_LINE_RE.match(line):
         self.tags[m.group('key')] = m.group('value')
       else:
         description_without_tags.append(line)
@@ -946,7 +938,7 @@ class SvnChange(Change):
 
   def _GetChangeLists(self):
     """Get all change lists."""
-    if self._changelists == None:
+    if self._changelists is None:
       previous_cwd = os.getcwd()
       os.chdir(self.RepositoryRoot())
       # Need to import here to avoid circular dependency.
@@ -1004,7 +996,7 @@ def ListRelevantPresubmitFiles(files, root):
   files = [normpath(os.path.join(root, f)) for f in files]
 
   # List all the individual directories containing files.
-  directories = set([os.path.dirname(f) for f in files])
+  directories = {os.path.dirname(f) for f in files}
 
   # Ignore root if inherit-review-settings-ok is present.
   if os.path.isfile(os.path.join(root, 'inherit-review-settings-ok')):
@@ -1032,7 +1024,7 @@ def ListRelevantPresubmitFiles(files, root):
     if os.path.isfile(p):
       results.append(p)
 
-  logging.debug('Presubmit files: %s' % ','.join(results))
+  logging.debug(f"Presubmit files: {','.join(results)}")
   return results
 
 
@@ -1519,21 +1511,20 @@ def DoPresubmitChecks(change,
 def ScanSubDirs(mask, recursive):
   if not recursive:
     return [x for x in glob.glob(mask) if x not in ('.svn', '.git')]
-  else:
-    results = []
-    for root, dirs, files in os.walk('.'):
-      if '.svn' in dirs:
-        dirs.remove('.svn')
-      if '.git' in dirs:
-        dirs.remove('.git')
-      for name in files:
-        if fnmatch.fnmatch(name, mask):
-          results.append(os.path.join(root, name))
-    return results
+  results = []
+  for root, dirs, files in os.walk('.'):
+    if '.svn' in dirs:
+      dirs.remove('.svn')
+    if '.git' in dirs:
+      dirs.remove('.git')
+    results.extend(
+        os.path.join(root, name) for name in files
+        if fnmatch.fnmatch(name, mask))
+  return results
 
 
 def ParseFiles(args, recursive):
-  logging.debug('Searching for %s' % args)
+  logging.debug(f'Searching for {args}')
   files = []
   for arg in args:
     files.extend([('M', f) for f in ScanSubDirs(arg, recursive)])
@@ -1543,9 +1534,7 @@ def ParseFiles(args, recursive):
 def load_files(options, args):
   """Tries to determine the SCM."""
   change_scm = scm.determine_scm(options.root)
-  files = []
-  if args:
-    files = ParseFiles(args, options.recursive)
+  files = ParseFiles(args, options.recursive) if args else []
   if change_scm == 'svn':
     change_class = SvnChange
     if not files:

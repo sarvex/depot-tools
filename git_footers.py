@@ -22,8 +22,7 @@ def normalize_name(header):
 
 
 def parse_footer(line):
-  match = FOOTER_PATTERN.match(line)
-  if match:
+  if match := FOOTER_PATTERN.match(line):
     return (match.group(1), match.group(2))
   else:
     return None
@@ -51,11 +50,8 @@ def parse_footers(message):
 def get_unique(footers, key):
   key = normalize_name(key)
   values = footers[key]
-  assert len(values) <= 1, 'Multiple %s footers' % key
-  if values:
-    return values[0]
-  else:
-    return None
+  assert len(values) <= 1, f'Multiple {key} footers'
+  return values[0] if values else None
 
 
 def get_position(footers):
@@ -71,16 +67,14 @@ def get_position(footers):
     from git-svn-id. The position number can be None if it was not inferrable.
   """
 
-  position = get_unique(footers, 'Cr-Commit-Position')
-  if position:
+  if position := get_unique(footers, 'Cr-Commit-Position'):
     match = CHROME_COMMIT_POSITION_PATTERN.match(position)
-    assert match, 'Invalid Cr-Commit-Position value: %s' % position
+    assert match, f'Invalid Cr-Commit-Position value: {position}'
     return (match.group(1), match.group(2))
 
-  svn_commit = get_unique(footers, 'git-svn-id')
-  if svn_commit:
+  if svn_commit := get_unique(footers, 'git-svn-id'):
     match = GIT_SVN_ID_PATTERN.match(svn_commit)
-    assert match, 'Invalid git-svn-id value: %s' % svn_commit
+    assert match, f'Invalid git-svn-id value: {svn_commit}'
     # V8 has different semantics than Chromium.
     if re.match(r'.*https?://v8\.googlecode\.com/svn/trunk',
                 match.group(1)):
@@ -94,11 +88,10 @@ def get_position(footers):
     if re.match('.*/trunk.*$', match.group(1)):
       return ('refs/heads/master', match.group(2))
 
-    # But for now only support faking branch-heads for chrome.
-    branch_match = re.match('.*/chrome/branches/([\w/-]+)/src$', match.group(1))
-    if branch_match:
+    if branch_match := re.match('.*/chrome/branches/([\w/-]+)/src$',
+                                match.group(1)):
       # svn commit numbers do not map to branches.
-      return ('refs/branch-heads/%s' % branch_match.group(1), None)
+      return f'refs/branch-heads/{branch_match[1]}', None
 
   raise ValueError('Unable to infer commit position from footers')
 

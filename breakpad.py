@@ -12,6 +12,7 @@ It is only enabled when all these conditions are met:
   3. no NO_BREAKPAD environment variable is defined
 """
 
+
 import atexit
 import getpass
 import os
@@ -34,10 +35,9 @@ _TIME_STARTED = time.time()
 _HOST_NAME = socket.getfqdn()
 
 # Skip unit tests and we don't want anything from non-googler.
-IS_ENABLED = (
-    not 'test' in getattr(sys.modules['__main__'], '__file__', '') and
-    not 'NO_BREAKPAD' in os.environ and
-    _HOST_NAME.endswith(('.google.com', '.chromium.org')))
+IS_ENABLED = ('test' not in getattr(sys.modules['__main__'], '__file__', '')
+              and 'NO_BREAKPAD' not in os.environ and _HOST_NAME.endswith(
+                  ('.google.com', '.chromium.org')))
 
 
 def post(url, params):
@@ -92,18 +92,19 @@ def SendStack(last_tb, stack, url=None, maxlen=50, verbose=True):
   def p(o):
     if verbose:
       print(o)
+
   p('Sending crash report ...')
   params = {
-    'args': sys.argv,
-    'cwd': os.getcwd(),
-    'exception': FormatException(last_tb),
-    'host': _HOST_NAME,
-    'stack': stack[0:4096],
-    'user': getpass.getuser(),
-    'version': sys.version,
+      'args': sys.argv,
+      'cwd': os.getcwd(),
+      'exception': FormatException(last_tb),
+      'host': _HOST_NAME,
+      'stack': stack[:4096],
+      'user': getpass.getuser(),
+      'version': sys.version,
   }
-  p('\n'.join('  %s: %s' % (k, params[k][0:maxlen]) for k in sorted(params)))
-  p(post(url or DEFAULT_URL + '/breakpad', params))
+  p('\n'.join(f'  {k}: {params[k][:maxlen]}' for k in sorted(params)))
+  p(post(url or f'{DEFAULT_URL}/breakpad', params))
 
 
 def SendProfiling(duration, url=None):
@@ -114,16 +115,14 @@ def SendProfiling(duration, url=None):
     'duration': duration,
     'platform': sys.platform,
   }
-  post(url or DEFAULT_URL + '/profiling', params)
+  post(url or f'{DEFAULT_URL}/profiling', params)
 
 
 def CheckForException():
   """Runs at exit. Look if there was an exception active."""
-  last_value = getattr(sys, 'last_value', None)
-  if last_value:
+  if last_value := getattr(sys, 'last_value', None):
     if not isinstance(last_value, KeyboardInterrupt):
-      last_tb = getattr(sys, 'last_traceback', None)
-      if last_tb:
+      if last_tb := getattr(sys, 'last_traceback', None):
         SendStack(last_value, ''.join(traceback.format_tb(last_tb)))
   else:
     duration = time.time() - _TIME_STARTED

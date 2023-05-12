@@ -35,7 +35,7 @@ class RegionInfo(object):
         self.connection_cls = connection_cls
 
     def __repr__(self):
-        return 'RegionInfo:%s' % self.name
+        return f'RegionInfo:{self.name}'
 
     def startElement(self, name, attrs, connection):
         return None

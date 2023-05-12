@@ -59,10 +59,9 @@ class DiffFiltererWrapper(object):
     if (line.startswith(self.index_string)):
       self.SetCurrentFile(line[len(self.index_string):])
       line = self._Replace(line)
-    else:
-      if (line.startswith(self.original_prefix) or
+    elif (line.startswith(self.original_prefix) or
           line.startswith(self.working_prefix)):
-        line = self._Replace(line)
+      line = self._Replace(line)
     self._print_func(line)
 
 
@@ -78,7 +77,7 @@ class GitDiffFilterer(DiffFiltererWrapper):
     self._current_file = current_file[:(len(current_file)/2)][2:]
 
   def _Replace(self, line):
-    return re.sub("[a|b]/" + self._current_file, self._replacement_file, line)
+    return re.sub(f"[a|b]/{self._current_file}", self._replacement_file, line)
 
 
 ### SCM abstraction layer
@@ -97,9 +96,7 @@ def GetScmName(url):
           url.startswith('svn://') or url.startswith('svn+ssh://')):
       return 'svn'
     elif url.startswith('file://'):
-      if url.endswith('.git'):
-        return 'git'
-      return 'svn'
+      return 'git' if url.endswith('.git') else 'svn'
   return None
 
 
@@ -110,11 +107,11 @@ def CreateSCM(url, root_dir=None, relpath=None, out_fh=None, out_cb=None):
   }
 
   scm_name = GetScmName(url)
-  if not scm_name in SCM_MAP:
-    raise gclient_utils.Error('No SCM found for url %s' % url)
+  if scm_name not in SCM_MAP:
+    raise gclient_utils.Error(f'No SCM found for url {url}')
   scm_class = SCM_MAP[scm_name]
   if not scm_class.BinaryExists():
-    raise gclient_utils.Error('%s command not found' % scm_name)
+    raise gclient_utils.Error(f'{scm_name} command not found')
   return scm_class(url, root_dir, relpath, out_fh, out_cb)
 
 
@@ -145,19 +142,20 @@ class SCMWrapper(object):
   def Print(self, *args, **kwargs):
     kwargs.setdefault('file', self.out_fh)
     if kwargs.pop('timestamp', True):
-      self.out_fh.write('[%s] ' % gclient_utils.Elapsed())
+      self.out_fh.write(f'[{gclient_utils.Elapsed()}] ')
     print(*args, **kwargs)
 
   def RunCommand(self, command, options, args, file_list=None):
     commands = ['cleanup', 'update', 'updatesingle', 'revert',
                 'revinfo', 'status', 'diff', 'pack', 'runhooks']
 
-    if not command in commands:
-      raise gclient_utils.Error('Unknown command %s' % command)
+    if command not in commands:
+      raise gclient_utils.Error(f'Unknown command {command}')
 
-    if not command in dir(self):
-      raise gclient_utils.Error('Command %s not implemented in %s wrapper' % (
-          command, self.__class__.__name__))
+    if command not in dir(self):
+      raise gclient_utils.Error(
+          f'Command {command} not implemented in {self.__class__.__name__} wrapper'
+      )
 
     return getattr(self, command)(options, args, file_list)
 
@@ -195,8 +193,7 @@ class SCMWrapper(object):
       # A checkout which doesn't exist can't be broken.
       return True
 
-    actual_remote_url = self.GetActualRemoteURL(options)
-    if actual_remote_url:
+    if actual_remote_url := self.GetActualRemoteURL(options):
       return (gclient_utils.SplitUrlRevision(actual_remote_url)[0].rstrip('/')
               == gclient_utils.SplitUrlRevision(self.url)[0].rstrip('/'))
     else:
@@ -211,10 +208,11 @@ class SCMWrapper(object):
         force: bool; if True, delete the directory. Otherwise, just move it.
     """
     if force and os.environ.get('CHROME_HEADLESS') == '1':
-      self.Print('_____ Conflicting directory found in %s. Removing.'
-                 % self.checkout_path)
-      gclient_utils.AddWarning('Conflicting directory %s deleted.'
-                               % self.checkout_path)
+      self.Print(
+          f'_____ Conflicting directory found in {self.checkout_path}. Removing.'
+      )
+      gclient_utils.AddWarning(
+          f'Conflicting directory {self.checkout_path} deleted.')
       gclient_utils.rmtree(self.checkout_path)
     else:
       bad_scm_dir = os.path.join(self._root_dir, '_bad_scm',
@@ -229,10 +227,11 @@ class SCMWrapper(object):
       dest_path = tempfile.mkdtemp(
           prefix=os.path.basename(self.relpath),
           dir=bad_scm_dir)
-      self.Print('_____ Conflicting directory found in %s. Moving to %s.'
-                 % (self.checkout_path, dest_path))
-      gclient_utils.AddWarning('Conflicting directory %s moved to %s.'
-                               % (self.checkout_path, dest_path))
+      self.Print(
+          f'_____ Conflicting directory found in {self.checkout_path}. Moving to {dest_path}.'
+      )
+      gclient_utils.AddWarning(
+          f'Conflicting directory {self.checkout_path} moved to {dest_path}.')
       shutil.move(self.checkout_path, dest_path)
 
 
@@ -260,7 +259,7 @@ class GitWrapper(SCMWrapper):
       # We assume git is newer than 1.7.  See: crbug.com/114483
       result, version = scm.GIT.AssertVersion('1.7')
       if not result:
-        raise gclient_utils.Error('Git version is older than 1.7: %s' % version)
+        raise gclient_utils.Error(f'Git version is older than 1.7: {version}')
       return result
     except OSError:
       return False
@@ -301,9 +300,7 @@ class GitWrapper(SCMWrapper):
 
   def _FetchAndReset(self, revision, file_list, options):
     """Equivalent to git fetch; git reset."""
-    quiet = []
-    if not options.verbose:
-      quiet = ['--quiet']
+    quiet = ['--quiet'] if not options.verbose else []
     self._UpdateBranchHeads(options, fetch=False)
 
     self._Fetch(options, prune=True, quiet=options.verbose)
@@ -318,8 +315,7 @@ class GitWrapper(SCMWrapper):
       return
     for f in os.listdir(hook_dir):
       if not f.endswith('.sample') and not f.endswith('.disabled'):
-        os.rename(os.path.join(hook_dir, f),
-                  os.path.join(hook_dir, f + '.disabled'))
+        os.rename(os.path.join(hook_dir, f), os.path.join(hook_dir, f'{f}.disabled'))
 
   def update(self, options, args, file_list):
     """Runs git to update or transparently checkout the working copy.

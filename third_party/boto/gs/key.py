@@ -61,32 +61,29 @@ class Key(S3Key):
 
     def __repr__(self):
         if self.generation and self.meta_generation:
-            ver_str = '#%s.%s' % (self.generation, self.meta_generation)
+            ver_str = f'#{self.generation}.{self.meta_generation}'
         else:
             ver_str = ''
         if self.bucket:
-            return '<Key: %s,%s%s>' % (self.bucket.name, self.name, ver_str)
+            return f'<Key: {self.bucket.name},{self.name}{ver_str}>'
         else:
-            return '<Key: None,%s%s>' % (self.name, ver_str)
+            return f'<Key: None,{self.name}{ver_str}>'
 
     def endElement(self, name, value, connection):
+        if name == 'Owner':
+            return
         if name == 'Key':
             self.name = value
         elif name == 'ETag':
             self.etag = value
         elif name == 'IsLatest':
-            if value == 'true':
-                self.is_latest = True
-            else:
-                self.is_latest = False
+            self.is_latest = value == 'true'
         elif name == 'LastModified':
             self.last_modified = value
         elif name == 'Size':
             self.size = int(value)
         elif name == 'StorageClass':
             self.storage_class = value
-        elif name == 'Owner':
-            pass
         elif name == 'VersionId':
             self.version_id = value
         elif name == 'Generation':
@@ -103,9 +100,7 @@ class Key(S3Key):
     def get_file(self, fp, headers=None, cb=None, num_cb=10,
                  torrent=False, version_id=None, override_num_retries=None,
                  response_headers=None):
-        query_args = None
-        if self.generation:
-            query_args = ['generation=%s' % self.generation]
+        query_args = [f'generation={self.generation}'] if self.generation else None
         self._get_file_internal(fp, headers=headers, cb=cb, num_cb=num_cb,
                                 override_num_retries=override_num_retries,
                                 response_headers=response_headers,
@@ -297,35 +292,20 @@ class Key(S3Key):
         if rewind:
             # caller requests reading from beginning of fp.
             fp.seek(0, os.SEEK_SET)
-        else:
-            # The following seek/tell/seek logic is intended
-            # to detect applications using the older interface to
-            # set_contents_from_file(), which automatically rewound the
-            # file each time the Key was reused. This changed with commit
-            # 14ee2d03f4665fe20d19a85286f78d39d924237e, to support uploads
-            # split into multiple parts and uploaded in parallel, and at
-            # the time of that commit this check was added because otherwise
-            # older programs would get a success status and upload an empty
-            # object. Unfortuantely, it's very inefficient for fp's implemented
-            # by KeyFile (used, for example, by gsutil when copying between
-            # providers). So, we skip the check for the KeyFile case.
-            # TODO: At some point consider removing this seek/tell/seek
-            # logic, after enough time has passed that it's unlikely any
-            # programs remain that assume the older auto-rewind interface.
-            if not isinstance(fp, KeyFile):
-                spos = fp.tell()
-                fp.seek(0, os.SEEK_END)
-                if fp.tell() == spos:
-                    fp.seek(0, os.SEEK_SET)
-                    if fp.tell() != spos:
-                        # Raise an exception as this is likely a programming
-                        # error whereby there is data before the fp but nothing
-                        # after it.
-                        fp.seek(spos)
-                        raise AttributeError('fp is at EOF. Use rewind option '
-                                             'or seek() to data start.')
-                # seek back to the correct position.
-                fp.seek(spos)
+        elif not isinstance(fp, KeyFile):
+            spos = fp.tell()
+            fp.seek(0, os.SEEK_END)
+            if fp.tell() == spos:
+                fp.seek(0, os.SEEK_SET)
+                if fp.tell() != spos:
+                    # Raise an exception as this is likely a programming
+                    # error whereby there is data before the fp but nothing
+                    # after it.
+                    fp.seek(spos)
+                    raise AttributeError('fp is at EOF. Use rewind option '
+                                         'or seek() to data start.')
+            # seek back to the correct position.
+            fp.seek(spos)
 
         if hasattr(fp, 'name'):
             self.path = fp.name
@@ -353,17 +333,16 @@ class Key(S3Key):
                 fp.seek(spos)
                 size = self.size
 
-            if md5 == None:
+            if md5 is None:
                 md5 = self.compute_md5(fp, size)
             self.md5 = md5[0]
             self.base64md5 = md5[1]
 
-            if self.name == None:
+            if self.name is None:
                 self.name = self.md5
 
-            if not replace:
-                if self.bucket.lookup(self.name):
-                    return
+            if not replace and self.bucket.lookup(self.name):
+                return
 
             if if_generation is not None:
                 headers['x-goog-if-generation-match'] = str(if_generation)
@@ -435,11 +414,10 @@ class Key(S3Key):
         self.md5 = None
         self.base64md5 = None
 
-        fp = open(filename, 'rb')
-        self.set_contents_from_file(fp, headers, replace, cb, num_cb,
-                                    policy, md5, res_upload_handler,
-                                    if_generation=if_generation)
-        fp.close()
+        with open(filename, 'rb') as fp:
+            self.set_contents_from_file(fp, headers, replace, cb, num_cb,
+                                        policy, md5, res_upload_handler,
+                                        if_generation=if_generation)
 
     def set_contents_from_string(self, s, headers=None, replace=True,
                                  cb=None, num_cb=10, policy=None, md5=None,

@@ -522,7 +522,7 @@ class DataPipelineConnection(AWSQueryConnection):
 
     def make_request(self, action, body):
         headers = {
-            'X-Amz-Target': '%s.%s' % (self.ServiceName, action),
+            'X-Amz-Target': f'{self.ServiceName}.{action}',
             'Host': self.region.endpoint,
             'Content-Type': 'application/x-amz-json-1.1',
             'Content-Length': str(len(body)),

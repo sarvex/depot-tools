@@ -38,7 +38,7 @@ class GclTestsBase(SuperMoxTestBase):
     gcl.CODEREVIEW_SETTINGS = self.old_review_settings
 
   def fakeChange(self, files=None):  # pylint: disable=R0201
-    if files == None:
+    if files is None:
       files = [('A', 'aa'), ('M', 'bb')]
 
     change_info = self.mox.CreateMock(gcl.ChangeInfo)
@@ -66,14 +66,17 @@ class GclTestsBase(SuperMoxTestBase):
     def AddComment(comment):
       # pylint: disable=W0212
       change_info._comments_added.append(comment)
+
     change_info.AddComment = AddComment
 
     def Delete():
       change_info._deleted = True
+
     change_info.Delete = Delete
 
     def CloseIssue():
       change_info._closed = True
+
     change_info.CloseIssue = CloseIssue
 
     return change_info
@@ -172,9 +175,9 @@ class GclUnittest(GclTestsBase):
   def testGetRepositoryRootGood(self):
     root_path = gcl.os.path.join('bleh', 'prout', 'pouet')
     gcl.os.getcwd().AndReturn(root_path)
-    gcl.SVN.GetCheckoutRoot(root_path).AndReturn(root_path + '.~')
+    gcl.SVN.GetCheckoutRoot(root_path).AndReturn(f'{root_path}.~')
     self.mox.ReplayAll()
-    self.assertEquals(gcl.GetRepositoryRoot(), root_path + '.~')
+    self.assertEquals(gcl.GetRepositoryRoot(), f'{root_path}.~')
 
   def testHelp(self):
     gcl.sys.stdout.write = lambda x: None
@@ -376,7 +379,7 @@ class CMDuploadUnittest(GclTestsBase):
           '--file=descfile'],
         change_info.patch).AndReturn(("1", "2"))
     gcl.os.remove('descfile')
-    change_info.SendToRietveld("/lint/issue%s_%s" % ('1', '2'), timeout=60)
+    change_info.SendToRietveld('/lint/issue1_2', timeout=60)
     gcl.os.chdir('somewhere')
     gcl.sys.stdout.write("*** Upload does not submit a try; use gcl try to"
                          " submit a try. ***")
@@ -418,7 +421,7 @@ class CMDuploadUnittest(GclTestsBase):
         ['upload.py', '-y', '--server=https://my_server', "--file=descfile" ],
         change_info.patch).AndReturn(("1", "2"))
     gcl.os.remove('descfile')
-    change_info.SendToRietveld("/lint/issue%s_%s" % ('1', '2'), timeout=60)
+    change_info.SendToRietveld('/lint/issue1_2', timeout=60)
     gcl.os.chdir('somewhere')
     gcl.sys.stdout.write("*** Upload does not submit a try; use gcl try to"
                          " submit a try. ***")

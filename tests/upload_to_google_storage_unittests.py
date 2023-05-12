@@ -46,16 +46,24 @@ class UploadTests(unittest.TestCase):
 
   def test_upload_single_file(self):
     filenames = [self.lorem_ipsum]
-    output_filename = '%s.sha1'  % self.lorem_ipsum
+    output_filename = f'{self.lorem_ipsum}.sha1'
     code = upload_to_google_storage.upload_to_google_storage(
         filenames, self.base_url, self.gsutil, True, False, 1, False)
     self.assertEqual(
         self.gsutil.history,
-        [('check_call',
-          ('ls', '%s/%s' % (self.base_url, self.lorem_ipsum_sha1))),
-         ('check_call',
-          ('cp', '-q', filenames[0], '%s/%s' % (self.base_url,
-                                                self.lorem_ipsum_sha1)))])
+        [
+            ('check_call', ('ls', f'{self.base_url}/{self.lorem_ipsum_sha1}')),
+            (
+                'check_call',
+                (
+                    'cp',
+                    '-q',
+                    filenames[0],
+                    f'{self.base_url}/{self.lorem_ipsum_sha1}',
+                ),
+            ),
+        ],
+    )
     self.assertTrue(os.path.exists(output_filename))
     self.assertEqual(
         open(output_filename, 'rb').read(),
@@ -65,7 +73,7 @@ class UploadTests(unittest.TestCase):
 
   def test_upload_single_file_remote_exists(self):
     filenames = [self.lorem_ipsum]
-    output_filename = '%s.sha1'  % self.lorem_ipsum
+    output_filename = f'{self.lorem_ipsum}.sha1'
     etag_string = 'ETag: 634d7c1ed3545383837428f031840a1e'
     self.gsutil.add_expected(0, '', '')
     self.gsutil.add_expected(0, etag_string, '')
@@ -73,10 +81,14 @@ class UploadTests(unittest.TestCase):
         filenames, self.base_url, self.gsutil, False, False, 1, False)
     self.assertEqual(
         self.gsutil.history,
-        [('check_call',
-          ('ls', '%s/%s' % (self.base_url, self.lorem_ipsum_sha1))),
-         ('check_call',
-          ('ls', '-L', '%s/%s' % (self.base_url, self.lorem_ipsum_sha1)))])
+        [
+            ('check_call', ('ls', f'{self.base_url}/{self.lorem_ipsum_sha1}')),
+            (
+                'check_call',
+                ('ls', '-L', f'{self.base_url}/{self.lorem_ipsum_sha1}'),
+            ),
+        ],
+    )
     self.assertTrue(os.path.exists(output_filename))
     self.assertEqual(
         open(output_filename, 'rb').read(),
@@ -109,7 +121,7 @@ class UploadTests(unittest.TestCase):
 
   def test_skip_hashing(self):
     filenames = [self.lorem_ipsum]
-    output_filename = '%s.sha1' % self.lorem_ipsum
+    output_filename = f'{self.lorem_ipsum}.sha1'
     fake_hash = '6871c8e24da15bad8b0be2c36edc9dc77e37727f'
     with open(output_filename, 'wb') as f:
       f.write(fake_hash)  # Fake hash.
@@ -117,12 +129,15 @@ class UploadTests(unittest.TestCase):
         filenames, self.base_url, self.gsutil, False, False, 1, True)
     self.assertEqual(
         self.gsutil.history,
-        [('check_call',
-          ('ls', '%s/%s' % (self.base_url, fake_hash))),
-         ('check_call',
-          ('ls', '-L', '%s/%s' % (self.base_url, fake_hash))),
-         ('check_call',
-          ('cp', '-q', filenames[0], '%s/%s' % (self.base_url, fake_hash)))])
+        [
+            ('check_call', ('ls', f'{self.base_url}/{fake_hash}')),
+            ('check_call', ('ls', '-L', f'{self.base_url}/{fake_hash}')),
+            (
+                'check_call',
+                ('cp', '-q', filenames[0], f'{self.base_url}/{fake_hash}'),
+            ),
+        ],
+    )
     self.assertEqual(
         open(output_filename, 'rb').read(), fake_hash)
     os.remove(output_filename)

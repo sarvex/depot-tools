@@ -80,15 +80,12 @@ class GSConnection(S3Connection):
                 headers = {self.provider.acl_header : policy}
         if not location:
             location = Location.DEFAULT
-        location_elem = ('<LocationConstraint>%s</LocationConstraint>'
-                         % location)
+        location_elem = f'<LocationConstraint>{location}</LocationConstraint>'
         if storage_class:
-            storage_class_elem = ('<StorageClass>%s</StorageClass>'
-                                  % storage_class)
+            storage_class_elem = f'<StorageClass>{storage_class}</StorageClass>'
         else:
             storage_class_elem = ''
-        data = ('<CreateBucketConfiguration>%s%s</CreateBucketConfiguration>'
-                 % (location_elem, storage_class_elem))
+        data = f'<CreateBucketConfiguration>{location_elem}{storage_class_elem}</CreateBucketConfiguration>'
         response = self.make_request('PUT', bucket_name, headers=headers,
                 data=data)
         body = response.read()

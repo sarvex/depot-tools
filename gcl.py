@@ -8,6 +8,7 @@ Wrapper script around Rietveld's upload.py that simplifies working with groups
 of files.
 """
 
+
 import json
 import optparse
 import os
@@ -49,7 +50,7 @@ REPOSITORY_ROOT = ""
 # Filename where we store repository specific information for gcl.
 CODEREVIEW_SETTINGS_FILE = "codereview.settings"
 CODEREVIEW_SETTINGS_FILE_NOT_FOUND = (
-    'No %s file found. Please add one.' % CODEREVIEW_SETTINGS_FILE)
+    f'No {CODEREVIEW_SETTINGS_FILE} file found. Please add one.')
 
 # Warning message when the change appears to be missing tests.
 MISSING_TEST_MSG = "Change contains new or modified methods, but no new tests!"
@@ -93,8 +94,8 @@ def GetRepositoryRoot():
   global REPOSITORY_ROOT
   if not REPOSITORY_ROOT:
     REPOSITORY_ROOT = SVN.GetCheckoutRoot(os.getcwd())
-    if not REPOSITORY_ROOT:
-      raise gclient_utils.Error("gcl run outside of repository")
+  if not REPOSITORY_ROOT:
+    raise gclient_utils.Error("gcl run outside of repository")
   return REPOSITORY_ROOT
 
 
@@ -135,10 +136,7 @@ def GetCachedFile(filename, max_age=60*60*24*3, use_root=False):
         (time.time() - os.stat(cached_file).st_mtime) > max_age):
       dir_info = SVN.CaptureLocalInfo([], '.')
       repo_root = dir_info['Repository Root']
-      if use_root:
-        url_path = repo_root
-      else:
-        url_path = dir_info['URL']
+      url_path = repo_root if use_root else dir_info['URL']
       while True:
         # Look in the repository at the current level for the file.
         for _ in range(5):
@@ -148,7 +146,7 @@ def GetCachedFile(filename, max_age=60*60*24*3, use_root=False):
             # of success but will do in case of failure so don't mind putting
             # stderr into content_array.
             content_array = []
-            svn_path = url_path + '/' + filename
+            svn_path = f'{url_path}/{filename}'
             args = ['svn', 'cat', svn_path]
             if sys.platform != 'darwin':
               # MacOSX 10.5.2 has a bug with svn 1.4.4 that will trigger the
@@ -198,8 +196,7 @@ def GetCodeReviewSetting(key):
   # Use '__just_initialized' as a flag to determine if the settings were
   # already initialized.
   if '__just_initialized' not in CODEREVIEW_SETTINGS:
-    settings_file = GetCachedFile(CODEREVIEW_SETTINGS_FILE)
-    if settings_file:
+    if settings_file := GetCachedFile(CODEREVIEW_SETTINGS_FILE):
       CODEREVIEW_SETTINGS.update(
           gclient_utils.ParseCodereviewSettingsContent(settings_file))
     CODEREVIEW_SETTINGS.setdefault('__just_initialized', None)
@@ -402,8 +399,7 @@ class ChangeInfo(object):
     ready when the issue is viewed."""
     if self.issue and self.patchset:
       try:
-        self.SendToRietveld('/lint/issue%s_%s' % (self.issue, self.patchset),
-            timeout=60)
+        self.SendToRietveld(f'/lint/issue{self.issue}_{self.patchset}', timeout=60)
       except ssl.SSLError as e:
         # It takes more than 60 seconds to lint some CLs. Silently ignore
         # the expected timeout.
@@ -416,7 +412,7 @@ class ChangeInfo(object):
       return self.RpcServer().Send(request_path, timeout=timeout, **kwargs)
     except urllib2.URLError:
       if timeout is None:
-        ErrorExit('Error accessing url %s' % request_path)
+        ErrorExit(f'Error accessing url {request_path}')
       else:
         return None
 
@@ -425,7 +421,6 @@ class ChangeInfo(object):
 
     A change needs unit tests if it contains any new source files or methods.
     """
-    SOURCE_SUFFIXES = [".cc", ".cpp", ".c", ".m", ".mm"]
     # Ignore third_party entirely.
     files = [f for f in self._NonDeletedFileList()
              if f.find("third_party") == -1]
@@ -433,24 +428,20 @@ class ChangeInfo(object):
                    if f.find("third_party") == -1]
 
     # If the change is entirely in third_party, we're done.
-    if len(files) == 0:
+    if not files:
       return False
 
-    # Any new or modified test files?
-    # A test file's name ends with "test.*" or "tests.*".
-    test_files = [test for test in files
-                  if os.path.splitext(test)[0].rstrip("s").endswith("test")]
-    if len(test_files) > 0:
+    if test_files := [
+        test for test in files
+        if os.path.splitext(test)[0].rstrip("s").endswith("test")
+    ]:
       return False
 
-    # Any new source files?
-    source_files = [item for item in added_files
-                    if os.path.splitext(item)[1] in SOURCE_SUFFIXES]
-    if len(source_files) > 0:
-      return True
-
-    # Do the long test, checking the files for new methods.
-    return self._HasNewMethod()
+    SOURCE_SUFFIXES = [".cc", ".cpp", ".c", ".m", ".mm"]
+    return (True if (source_files := [
+        item for item in added_files
+        if os.path.splitext(item)[1] in SOURCE_SUFFIXES
+    ]) else self._HasNewMethod())
 
   def _HasNewMethod(self):
     """Returns True if the changeset contains any new functions, or if a
@@ -516,7 +507,7 @@ class ChangeInfo(object):
     info_file = GetChangelistInfoFile(changename)
     if not os.path.exists(info_file):
       if fail_on_not_found:
-        ErrorExit("Changelist " + changename + " not found.")
+        ErrorExit(f"Changelist {changename} not found.")
       return ChangeInfo(changename, 0, 0, '', None, local_root, None, False)
     content = gclient_utils.FileRead(info_file)
     save = False
@@ -597,7 +588,7 @@ class ChangeInfo(object):
     return json.loads(content)
 
   def __str__(self):
-    out = ['%s:' % self.__class__.__name__]
+    out = [f'{self.__class__.__name__}:']
     for k in dir(self):
       if k.startswith('__'):
         continue
@@ -611,7 +602,7 @@ class ChangeInfo(object):
 def GetChangelistInfoFile(changename):
   """Returns the file that stores information about a changelist."""
   if not changename or re.search(r'[^\w-]', changename):
-    ErrorExit("Invalid changelist name: " + changename)
+    ErrorExit(f"Invalid changelist name: {changename}")
   return os.path.join(GetChangesDir(), changename)
 
 
@@ -696,9 +687,7 @@ def GetFilesNotInCL():
   which directories are scanned.
   """
   modified_files = GetModifiedFiles()
-  if "" not in modified_files:
-    return []
-  return modified_files[""]
+  return [] if "" not in modified_files else modified_files[""]
 
 
 def ListFiles(show_unknown_files):
@@ -741,11 +730,11 @@ def GetTreeStatus():
 def OptionallyDoPresubmitChecks(change_info, committing, args):
   if FilterFlag(args, "--no_presubmit") or FilterFlag(args, "--force"):
     breakpad.SendStack(
-        breakpad.DEFAULT_URL + '/breakpad',
+        f'{breakpad.DEFAULT_URL}/breakpad',
         'GclHooksBypassedCommit',
-        'Issue %s/%s bypassed hook when committing (tree status was "%s")' %
-        (change_info.rietveld, change_info.issue, GetTreeStatus()),
-        verbose=False)
+        f'Issue {change_info.rietveld}/{change_info.issue} bypassed hook when committing (tree status was "{GetTreeStatus()}")',
+        verbose=False,
+    )
     return presubmit_support.PresubmitOutput()
   return DoPresubmitChecks(change_info, committing, True)
 
@@ -761,10 +750,11 @@ def need_change(function):
   """Converts args -> change_info."""
   # pylint: disable=W0612,W0621
   def hook(args):
-    if not len(args) == 1:
+    if len(args) != 1:
       ErrorExit("You need to pass a change list name")
     change_info = ChangeInfo.Load(args[0], GetRepositoryRoot(), True, True)
     return function(change_info)
+
   defer_attributes(function, hook)
   hook.need_change = True
   hook.no_args = True
@@ -960,7 +950,7 @@ def CMDpresubmit(change_info, args):
   parser.add_option('--upload', action='store_true')
   options, args = parser.parse_args(args)
   if args:
-    parser.error('Unrecognized args: %s' % args)
+    parser.error(f'Unrecognized args: {args}')
   if options.upload:
     print('*** Presubmit checks for UPLOAD would report: ***')
     return not DoPresubmitChecks(change_info, False, False)
@@ -1316,8 +1306,7 @@ def CMDdiff(args):
     files = [f[1] for f in GetFilesNotInCL()]
 
   root = GetRepositoryRoot()
-  cmd = ['svn', 'diff']
-  cmd.extend([os.path.join(root, x) for x in files])
+  cmd = ['svn', 'diff', *[os.path.join(root, x) for x in files]]
   cmd.extend(args)
   return RunShellWithReturnCode(cmd, print_output=True)[1]
 
@@ -1342,7 +1331,7 @@ def CMDdescription(change_info):
 
 def CMDdelete(args):
   """Deletes a changelist."""
-  if not len(args) == 1:
+  if len(args) != 1:
     ErrorExit('You need to pass a change list name')
   filepath = GetChangelistInfoFile(args[0])
   if not os.path.isfile(filepath):
@@ -1416,7 +1405,7 @@ def CMDpassthru(args):
 
 
 def Command(name):
-  return getattr(sys.modules[__name__], 'CMD' + name, None)
+  return getattr(sys.modules[__name__], f'CMD{name}', None)
 
 
 def GenUsage(command):
@@ -1424,14 +1413,10 @@ def GenUsage(command):
   obj = Command(command)
   display = command
   more = getattr(obj, 'usage', '')
-  if command == 'help':
+  if display == 'help':
     display = '<command>'
-  need_change_val = ''
-  if getattr(obj, 'need_change', None):
-    need_change_val = ' <change_list>'
-  options = ' [options]'
-  if getattr(obj, 'no_args', None):
-    options = ''
+  need_change_val = ' <change_list>' if getattr(obj, 'need_change', None) else ''
+  options = '' if getattr(obj, 'no_args', None) else ' [options]'
   res = 'Usage: gcl %s%s%s %s\n\n' % (display, need_change_val, options, more)
   res += re.sub('\n  ', '\n', obj.__doc__)
   return res

@@ -49,19 +49,16 @@ class Plugin(object):
     def is_capable(cls, requested_capability):
         """Returns true if the requested capability is supported by this plugin
         """
-        for c in requested_capability:
-            if not c in cls.capability:
-                return False
-        return True
+        return all(c in cls.capability for c in requested_capability)
 
 def get_plugin(cls, requested_capability=None):
     if not requested_capability:
         requested_capability = []
-    result = []
-    for handler in cls.__subclasses__():
-        if handler.is_capable(requested_capability):
-            result.append(handler)
-    return result
+    return [
+        handler
+        for handler in cls.__subclasses__()
+        if handler.is_capable(requested_capability)
+    ]
 
 def _import_module(filename):
     (path, name) = os.path.split(filename)

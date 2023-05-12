@@ -33,7 +33,7 @@ class InvalidGsutilError(Exception):
 
 def download_gsutil(version, target_dir):
   """Downloads gsutil into the target_dir."""
-  filename = 'gsutil_%s.zip' % version
+  filename = f'gsutil_{version}.zip'
   target_filename = os.path.join(target_dir, filename)
 
   # Check if the target exists already.
@@ -41,13 +41,13 @@ def download_gsutil(version, target_dir):
     md5_calc = hashlib.md5()
     with open(target_filename, 'rb') as f:
       while True:
-        buf = f.read(4096)
-        if not buf:
+        if buf := f.read(4096):
+          md5_calc.update(buf)
+        else:
           break
-        md5_calc.update(buf)
     local_md5 = md5_calc.hexdigest()
 
-    metadata_url = '%s%s' % (API_URL, filename)
+    metadata_url = f'{API_URL}{filename}'
     metadata = json.load(urllib2.urlopen(metadata_url))
     remote_md5 = base64.b64decode(metadata['md5Hash'])
 
@@ -56,14 +56,14 @@ def download_gsutil(version, target_dir):
     os.remove(target_filename)
 
   # Do the download.
-  url = '%s%s' % (GSUTIL_URL, filename)
+  url = f'{GSUTIL_URL}{filename}'
   u = urllib2.urlopen(url)
   with open(target_filename, 'wb') as f:
     while True:
-      buf = u.read(4096)
-      if not buf:
+      if buf := u.read(4096):
+        f.write(buf)
+      else:
         break
-      f.write(buf)
   return target_filename
 
 
@@ -74,7 +74,7 @@ def check_gsutil(gsutil_bin):
       stdout=subprocess.PIPE, stderr=subprocess.STDOUT) == 0
 
 def ensure_gsutil(version, target):
-  bin_dir = os.path.join(target, 'gsutil_%s' % version)
+  bin_dir = os.path.join(target, f'gsutil_{version}')
   gsutil_bin = os.path.join(bin_dir, 'gsutil', 'gsutil')
   if os.path.isfile(gsutil_bin) and check_gsutil(gsutil_bin):
     # Everything is awesome! we're all done here.

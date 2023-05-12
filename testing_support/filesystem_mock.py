@@ -34,14 +34,10 @@ class MockFileSystem(object):
     return path.rsplit(self.sep, 1)
 
   def abspath(self, path):
-    if path.endswith(self.sep):
-      return path[:-1]
-    return path
+    return path[:-1] if path.endswith(self.sep) else path
 
   def dirname(self, path):
-    if self.sep not in path:
-      return ''
-    return self._split(path)[0] or self.sep
+    return '' if self.sep not in path else self._split(path)[0] or self.sep
 
   def exists(self, path):
     return self.isfile(path) or self.isdir(path)

@@ -40,10 +40,10 @@ class BotoClientError(StandardError):
         self.reason = reason
 
     def __repr__(self):
-        return 'BotoClientError: %s' % self.reason
+        return f'BotoClientError: {self.reason}'
 
     def __str__(self):
-        return 'BotoClientError: %s' % self.reason
+        return f'BotoClientError: {self.reason}'
 
 class SDBPersistenceError(StandardError):
 
@@ -226,10 +226,10 @@ class SQSDecodeError(BotoClientError):
         self.message = message
 
     def __repr__(self):
-        return 'SQSDecodeError: %s' % self.reason
+        return f'SQSDecodeError: {self.reason}'
 
     def __str__(self):
-        return 'SQSDecodeError: %s' % self.reason
+        return f'SQSDecodeError: {self.reason}'
 
 class StorageResponseError(BotoServerError):
     """
@@ -280,11 +280,10 @@ class EC2ResponseError(BotoServerError):
             self.error_code, self.error_message = self.errors[0]
 
     def startElement(self, name, attrs, connection):
-        if name == 'Errors':
-            self._errorResultSet = ResultSet([('Error', _EC2Error)])
-            return self._errorResultSet
-        else:
+        if name != 'Errors':
             return None
+        self._errorResultSet = ResultSet([('Error', _EC2Error)])
+        return self._errorResultSet
 
     def endElement(self, name, value, connection):
         if name == 'RequestID':
@@ -446,8 +445,7 @@ class ResumableUploadException(Exception):
         self.disposition = disposition
 
     def __repr__(self):
-        return 'ResumableUploadException("%s", %s)' % (
-            self.message, self.disposition)
+        return f'ResumableUploadException("{self.message}", {self.disposition})'
 
 class ResumableDownloadException(Exception):
     """
@@ -462,8 +460,7 @@ class ResumableDownloadException(Exception):
         self.disposition = disposition
 
     def __repr__(self):
-        return 'ResumableDownloadException("%s", %s)' % (
-            self.message, self.disposition)
+        return f'ResumableDownloadException("{self.message}", {self.disposition})'
 
 class TooManyRecordsException(Exception):
     """

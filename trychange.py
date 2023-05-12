@@ -154,8 +154,7 @@ class SCM(object):
         return gcl_setting
     if self.codereview_settings is None:
       self.codereview_settings = {}
-      settings_file = self.ReadRootFile(self.codereview_settings_file)
-      if settings_file:
+      if settings_file := self.ReadRootFile(self.codereview_settings_file):
         for line in settings_file.splitlines():
           if not line or line.lstrip().startswith('#'):
             continue
@@ -182,8 +181,7 @@ class SCM(object):
       'root': self.GetCodeReviewSetting('TRYSERVER_ROOT'),
       'patchlevel': self.GetCodeReviewSetting('TRYSERVER_PATCHLEVEL'),
     }
-    logging.info('\n'.join(['%s: %s' % (k, v)
-                            for (k, v) in settings.iteritems() if v]))
+    logging.info('\n'.join([f'{k}: {v}' for (k, v) in settings.iteritems() if v]))
     for (k, v) in settings.iteritems():
       # Avoid overwriting options already set using command line flags.
       if v and getattr(self.options, k) is None:
@@ -196,13 +194,12 @@ class SCM(object):
     if not self.options.no_search:
       self.toplevel_root = gclient_utils.FindGclientRoot(self.checkout_root)
       if self.toplevel_root:
-        logging.info('Found .gclient at %s' % self.toplevel_root)
+        logging.info(f'Found .gclient at {self.toplevel_root}')
       else:
         self.toplevel_root = gclient_utils.FindFileUpwards(
             os.path.join('..', '.repo'), self.checkout_root)
         if self.toplevel_root:
-          logging.info('Found .repo dir at %s'
-                       % os.path.dirname(self.toplevel_root))
+          logging.info(f'Found .repo dir at {os.path.dirname(self.toplevel_root)}')
 
       # Parse TRYSERVER_* settings from codereview.settings before falling back
       # on setting self.options.root manually further down. Otherwise
@@ -224,7 +221,7 @@ class SCM(object):
     while cur.startswith(root):
       filepath = os.path.join(cur, filename)
       if os.path.isfile(filepath):
-        logging.info('Found %s at %s' % (filename, cur))
+        logging.info(f'Found {filename} at {cur}')
         return gclient_utils.FileRead(filepath)
       cur = os.path.dirname(cur)
     logging.warning('Didn\'t find %s' % filename)
@@ -237,7 +234,7 @@ class SCM(object):
         return True
       for r in self.options.exclude:
         if re.search(r, f[1]):
-          logging.info('Ignoring "%s"' % f[1])
+          logging.info(f'Ignoring "{f[1]}"')
           return True
       return False
 
@@ -248,7 +245,7 @@ class SCM(object):
     """Returns the 'svn status' emulated output as an array of (status, file)
        tuples."""
     raise NotImplementedError(
-        "abstract method -- subclass %s must override" % self.__class__)
+        f"abstract method -- subclass {self.__class__} must override")
 
   @property
   def files(self):
@@ -271,7 +268,7 @@ class SVN(SCM):
     if not self.options.email:
       # Assumes the svn credential is an email address.
       self.options.email = scm.SVN.GetEmail(self.checkout_root)
-    logging.info("SVN(%s)" % self.checkout_root)
+    logging.info(f"SVN({self.checkout_root})")
 
   def ReadRootFile(self, filename):
     data = SCM.ReadRootFile(self, filename)
@@ -309,12 +306,12 @@ class GIT(SCM):
       self.options.email = scm.GIT.GetEmail(self.checkout_root)
     if not self.diff_against:
       self.diff_against = scm.GIT.GetUpstreamBranch(self.checkout_root)
-      if not self.diff_against:
-        raise NoTryServerAccess(
-            "Unable to determine default branch to diff against. "
-            "Verify this branch is set up to track another"
-            "(via the --track argument to \"git checkout -b ...\"")
-    logging.info("GIT(%s)" % self.checkout_root)
+    if not self.diff_against:
+      raise NoTryServerAccess(
+          "Unable to determine default branch to diff against. "
+          "Verify this branch is set up to track another"
+          "(via the --track argument to \"git checkout -b ...\"")
+    logging.info(f"GIT({self.checkout_root})")
 
   def CaptureStatus(self):
     return scm.GIT.CaptureStatus(
@@ -342,7 +339,7 @@ def _ParseBotList(botlist, testfilter):
       tests = set()
       if ':' in bot:
         if bot.endswith(':compile'):
-          tests |= set(['compile'])
+          tests |= {'compile'}
         else:
           raise ValueError(
               'Can\'t use both --testfilter and --bot builder:test formats '
@@ -366,7 +363,7 @@ def _ApplyTestFilter(testfilter, bot_spec):
   compile).
   """
   if testfilter:
-    return [(botname, set(testfilter) | (tests & set(['compile'])))
+    return [(botname, set(testfilter) | tests & {'compile'})
             for botname, tests in bot_spec]
   else:
     return bot_spec
@@ -377,7 +374,7 @@ def _GenTSBotSpec(checkouts, change, changed_files, options):
   # Get try slaves from PRESUBMIT.py files if not specified.
   # Even if the diff comes from options.url, use the local checkout for bot
   # selection.
-  try:
+  with contextlib.suppress(ImportError):
     import presubmit_support
     root_presubmit = checkouts[0].ReadRootFile('PRESUBMIT.py')
     if not change:
@@ -417,9 +414,6 @@ def _GenTSBotSpec(checkouts, change, changed_files, options):
 
       bot_spec.extend(_ApplyTestFilter(options.testfilter, new_style))
 
-  except ImportError:
-    pass
-
   return bot_spec
 
 
@@ -443,8 +437,7 @@ def _ParseSendChangeOptions(bot_spec, options):
       'project',
   )
   for option_name in optional_values:
-    value = getattr(options, option_name)
-    if value:
+    if value := getattr(options, option_name):
       values.append((option_name, value))
 
   # Not putting clobber to optional_names
@@ -452,9 +445,7 @@ def _ParseSendChangeOptions(bot_spec, options):
   if options.clobber:
     values.append(('clobber', 'true'))
 
-  for bot, tests in bot_spec:
-    values.append(('bot', ('%s:%s' % (bot, ','.join(tests)))))
-
+  values.extend(('bot', f"{bot}:{','.join(tests)}") for bot, tests in bot_spec)
   return values
 
 
@@ -531,8 +522,8 @@ def _PrepareDescriptionAndPatchFiles(description, options):
         name (of patch) and diff (contents of patch).
   """
   current_time = str(datetime.datetime.now()).replace(':', '.')
-  patch_basename = '%s.%s.%s.diff' % (Escape(options.user),
-                                      Escape(options.name), current_time)
+  patch_basename = (
+      f'{Escape(options.user)}.{Escape(options.name)}.{current_time}.diff')
   with _TempFilename('description', description) as description_filename:
     with _TempFilename(patch_basename, options.diff) as patch_filename:
       yield patch_filename, description_filename
@@ -810,8 +801,7 @@ def PrintSuccess(bot_spec, options):
   if not options.dry_run:
     text = 'Patch \'%s\' sent to try server' % options.name
     if bot_spec:
-      text += ': %s' % ', '.join(
-          '%s:%s' % (b[0], ','.join(b[1])) for b in bot_spec)
+      text += (': %s' % ', '.join(f"{b[0]}:{','.join(b[1])}" for b in bot_spec))
     print(text)
 
 
@@ -867,7 +857,7 @@ def GetMungedDiff(path_diff, diff):
         if file_path.startswith('a/'):
           file_path = file_path[2:]
         changed_files.append(('M', file_path))
-      diff[i] = diff[i][0:4] + new_file
+      diff[i] = diff[i][:4] + new_file
   return (diff, changed_files)
 
 

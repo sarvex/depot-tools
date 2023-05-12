@@ -43,8 +43,7 @@ THREADED_INDEX_PACK_BLACKLIST = [
 class Error(Exception):
   """gclient exception class."""
   def __init__(self, msg, *args, **kwargs):
-    index = getattr(threading.currentThread(), 'index', 0)
-    if index:
+    if index := getattr(threading.currentThread(), 'index', 0):
       msg = '\n'.join('%d> %s' % (index, l) for l in msg.splitlines())
     super(Error, self).__init__(msg, *args, **kwargs)
 
@@ -119,12 +118,8 @@ def SyntaxErrorToError(filename, e):
 
 class PrintableObject(object):
   def __str__(self):
-    output = ''
-    for i in dir(self):
-      if i.startswith('__'):
-        continue
-      output += '%s = %s\n' % (i, str(getattr(self, i, '')))
-    return output
+    return ''.join('%s = %s\n' % (i, getattr(self, i, '')) for i in dir(self)
+                   if not i.startswith('__'))
 
 
 def FileRead(filename, mode='rU'):
@@ -162,7 +157,7 @@ def safe_rename(old, new):
         # Give up.
         raise
       # retry
-      logging.debug("Renaming failed from %s to %s. Retrying ..." % (old, new))
+      logging.debug(f"Renaming failed from {old} to {new}. Retrying ...")
       time.sleep(0.1)
 
 
@@ -357,7 +352,7 @@ class Annotated(Wrapper):
       # Use a dummy array to hold the string so the code can be lockless.
       # Strings are immutable, requiring to keep a lock for the whole dictionary
       # otherwise. Using an array is faster than using a dummy object.
-      if not index in self.__output_buffers:
+      if index not in self.__output_buffers:
         obj = self.__output_buffers[index] = ['']
       else:
         obj = self.__output_buffers[index]
@@ -380,9 +375,8 @@ class Annotated(Wrapper):
       # Detect threads no longer existing.
       indexes = (getattr(t, 'index', None) for t in threading.enumerate())
       indexes = filter(None, indexes)
-      for index in self.__output_buffers:
-        if not index in indexes:
-          orphans.append((index, self.__output_buffers[index][0]))
+      orphans.extend((index, self.__output_buffers[index][0])
+                     for index in self.__output_buffers if index not in indexes)
       for orphan in orphans:
         del self.__output_buffers[orphan[0]]
     finally:
@@ -396,17 +390,14 @@ class Annotated(Wrapper):
 
 
 def MakeFileAutoFlush(fileobj, delay=10):
-  autoflush = getattr(fileobj, 'autoflush', None)
-  if autoflush:
+  if autoflush := getattr(fileobj, 'autoflush', None):
     autoflush.delay = delay
     return fileobj
   return AutoFlush(fileobj, delay)
 
 
 def MakeFileAnnotated(fileobj, include_zero=False):
-  if getattr(fileobj, 'annotated', None):
-    return fileobj
-  return Annotated(fileobj)
+  return fileobj if getattr(fileobj, 'annotated', None) else Annotated(fileobj)
 
 
 GCLIENT_CHILDREN = []
@@ -659,7 +650,7 @@ def GetMacWinOrLinux():
     return 'linux'
   elif sys.platform == 'darwin':
     return 'mac'
-  raise Error('Unknown platform: ' + sys.platform)
+  raise Error(f'Unknown platform: {sys.platform}')
 
 
 def GetPrimarySolutionPath():
@@ -719,20 +710,15 @@ def GetBuildtoolsPlatformBinaryPath():
   elif sys.platform == 'darwin':
     subdir = 'mac'
   elif sys.platform.startswith('linux'):
-    if sys.maxsize > 2**32:
-      subdir = 'linux64'
-    else:
-      subdir = 'linux32'
+    subdir = 'linux64' if sys.maxsize > 2**32 else 'linux32'
   else:
-    raise Error('Unknown platform: ' + sys.platform)
+    raise Error(f'Unknown platform: {sys.platform}')
   return os.path.join(buildtools_path, subdir)
 
 
 def GetExeSuffix():
   """Returns '' or '.exe' depending on how executables work on this platform."""
-  if sys.platform.startswith(('cygwin', 'win')):
-    return '.exe'
-  return ''
+  return '.exe' if sys.platform.startswith(('cygwin', 'win')) else ''
 
 
 def GetGClientPrimarySolutionName(gclient_root_dir_path):
@@ -740,8 +726,7 @@ def GetGClientPrimarySolutionName(gclient_root_dir_path):
   gclient_config_file = os.path.join(gclient_root_dir_path, '.gclient')
   env = {}
   execfile(gclient_config_file, env)
-  solutions = env.get('solutions', [])
-  if solutions:
+  if solutions := env.get('solutions', []):
     return solutions[0].get('name')
   return None
 
@@ -844,7 +829,7 @@ class ExecutionQueue(object):
       total = len(self.queued) + len(self.ran) + len(self.running)
       if self.jobs == 1:
         total += 1
-      logging.debug('enqueued(%s)' % d.name)
+      logging.debug(f'enqueued({d.name})')
       if self.progress:
         self.progress._total = total
         self.progress.update(0)
@@ -859,10 +844,9 @@ class ExecutionQueue(object):
   @staticmethod
   def format_task_output(task, comment=''):
     if comment:
-      comment = ' (%s)' % comment
+      comment = f' ({comment})'
     if task.start and task.finish:
-      elapsed = ' (Elapsed: %s)' % (
-          str(task.finish - task.start).partition('.')[0])
+      elapsed = f" (Elapsed: {str(task.finish - task.start).partition('.')[0]})"
     else:
       elapsed = ''
     return """
@@ -1010,7 +994,7 @@ class ExecutionQueue(object):
     """One thread to execute one WorkItem."""
     def __init__(self, item, index, args, kwargs):
       threading.Thread.__init__(self, name=item.name or 'Worker')
-      logging.info('_Worker(%s) reqs:%s' % (item.name, item.requirements))
+      logging.info(f'_Worker({item.name}) reqs:{item.requirements}')
       self.item = item
       self.index = index
       self.args = args
@@ -1071,10 +1055,7 @@ def GetEditor(git, git_editor=None):
   if not editor:
     editor = os.environ.get('EDITOR')
   if not editor:
-    if sys.platform.startswith('win'):
-      editor = 'notepad'
-    else:
-      editor = 'vi'
+    editor = 'notepad' if sys.platform.startswith('win') else 'vi'
   return editor
 
 
@@ -1122,7 +1103,7 @@ def UpgradeToHttps(url):
     # Make sure it is a valid uri. Otherwise, urlparse() will consider it a
     # relative url and will use http:///foo. Note that it defaults to http://
     # for compatibility with naked url like "localhost:8080".
-    url = 'http://%s' % url
+    url = f'http://{url}'
   parsed = list(urlparse.urlparse(url))
   # Do not automatically upgrade http to https if a port number is provided.
   if parsed[0] == 'http' and not re.match(r'^.+?\:\d+$', parsed[1]):
@@ -1183,10 +1164,7 @@ def DefaultDeltaBaseCacheLimit():
   size limit is per-thread, and 32-bit systems can hit OOM errors if this
   parameter is set too high.
   """
-  if platform.architecture()[0].startswith('64'):
-    return '2g'
-  else:
-    return '512m'
+  return '2g' if platform.architecture()[0].startswith('64') else '512m'
 
 def DefaultIndexPackConfig(url=''):
   """Return reasonable default values for configuring git-index-pack.
@@ -1194,7 +1172,7 @@ def DefaultIndexPackConfig(url=''):
   Experiments suggest that higher values for pack.threads don't improve
   performance."""
   cache_limit = DefaultDeltaBaseCacheLimit()
-  result = ['-c', 'core.deltaBaseCacheLimit=%s' % cache_limit]
+  result = ['-c', f'core.deltaBaseCacheLimit={cache_limit}']
   if url in THREADED_INDEX_PACK_BLACKLIST:
     result.extend(['-c', 'pack.threads=1'])
   return result

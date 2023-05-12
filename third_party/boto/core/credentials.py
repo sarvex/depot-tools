@@ -48,7 +48,7 @@ def _search_md(url='http://169.254.169.254/latest/meta-data/iam/'):
             fields = r.content.split('\n')
             for field in fields:
                 if field.endswith('/'):
-                    d[field[0:-1]] = get_iam_role(url + field)
+                    d[field[:-1]] = get_iam_role(url + field)
                 else:
                     val = requests.get(url + field).content
                     if val[0] == '{':
@@ -65,9 +65,7 @@ def _search_md(url='http://169.254.169.254/latest/meta-data/iam/'):
 
 def search_metadata(**kwargs):
     credentials = None
-    metadata = _search_md()
-    # Assuming there's only one role on the instance profile.
-    if metadata:
+    if metadata := _search_md():
         metadata = metadata['iam']['security-credentials'].values()[0]
         credentials = Credentials(metadata['AccessKeyId'],
                                   metadata['SecretAccessKey'],
@@ -79,12 +77,13 @@ def search_environment(**kwargs):
     """
     Search for credentials in explicit environment variables.
     """
-    credentials = None
     access_key = os.environ.get(kwargs['access_key_name'].upper(), None)
     secret_key = os.environ.get(kwargs['secret_key_name'].upper(), None)
-    if access_key and secret_key:
-        credentials = Credentials(access_key, secret_key)
-    return credentials
+    return (
+        Credentials(access_key, secret_key)
+        if access_key and secret_key
+        else None
+    )
 
 
 def search_file(**kwargs):
@@ -104,7 +103,7 @@ def search_file(**kwargs):
         cp = configparser.RawConfigParser()
         cp.read(path)
         if not cp.has_section(persona):
-            raise ValueError('Persona: %s not found' % persona)
+            raise ValueError(f'Persona: {persona} not found')
         if cp.has_option(persona, access_key_name):
             access_key = cp.get(persona, access_key_name)
         else:

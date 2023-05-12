@@ -11,8 +11,8 @@ import urllib
 
 IS_WIN = sys.platform.startswith('win')
 BASE_URL = 'http://src.chromium.org/svn/trunk/tools/buildbot/scripts/'
-COMPILE_URL = BASE_URL + 'slave/compile.py'
-UTILS_URL = BASE_URL + 'common/chromium_utils.py'
+COMPILE_URL = f'{BASE_URL}slave/compile.py'
+UTILS_URL = f'{BASE_URL}common/chromium_utils.py'
 
 
 def Fetch(url, filename):
@@ -30,23 +30,17 @@ def GetLastestRevision():
     url += 'linux/'
   elif sys.platform.startswith('darwin'):
     url += 'mac/'
-  else:
-    # This path is actually win.
-    pass
   url += 'LATEST/REVISION'
-  text = urllib.urlopen(url).read()
-  if text:
-    match = re.search(r"(\d+)", text)
-    if match:
-      return int(match.group(1))
+  if text := urllib.urlopen(url).read():
+    if match := re.search(r"(\d+)", text):
+      return int(match[1])
   return None
 
 
 def DoUpdate(chrome_root):
   """gclient sync to the latest build."""
   cmd = ["gclient", "sync"]
-  rev = GetLastestRevision()
-  if rev:
+  if rev := GetLastestRevision():
     cmd.extend(['--revision', 'src@%d' % rev])
   return subprocess.call(cmd, cwd=chrome_root, shell=IS_WIN)
 
@@ -64,13 +58,13 @@ def main(args):
   if len(args) < 3:
     print('Usage: chrome-update.py <path> [options]')
     print('See options from compile.py at')
-    print('  %s' % COMPILE_URL)
+    print(f'  {COMPILE_URL}')
     print('\nFor more example, see the compile steps on the waterfall')
     return 1
 
   chrome_root = args[1]
   if not os.path.isdir(chrome_root):
-    print('Path to chrome root (%s) not found.' % chrome_root)
+    print(f'Path to chrome root ({chrome_root}) not found.')
     return 1
 
   rv = DoUpdate(chrome_root)

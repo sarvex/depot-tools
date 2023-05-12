@@ -44,10 +44,7 @@ class ResultSet(list):
     """
     def __init__(self, marker_elem=None):
         list.__init__(self)
-        if isinstance(marker_elem, list):
-            self.markers = marker_elem
-        else:
-            self.markers = []
+        self.markers = marker_elem if isinstance(marker_elem, list) else []
         self.marker = None
         self.key_marker = None
         self.next_marker = None  # avail when delimiter used
@@ -75,10 +72,7 @@ class ResultSet(list):
         return None
 
     def to_boolean(self, value, true_value='true'):
-        if value == true_value:
-            return True
-        else:
-            return False
+        return value == true_value
 
     def endElement(self, name, value, connection):
         if name == 'IsTruncated':
@@ -135,10 +129,7 @@ class BooleanResult(object):
         self.box_usage = None
 
     def __repr__(self):
-        if self.status:
-            return 'True'
-        else:
-            return 'False'
+        return 'True' if self.status else 'False'
 
     def __nonzero__(self):
         return self.status
@@ -147,10 +138,7 @@ class BooleanResult(object):
         return None
 
     def to_boolean(self, value, true_value='true'):
-        if value == true_value:
-            return True
-        else:
-            return False
+        return value == true_value
 
     def endElement(self, name, value, connection):
         if name == 'return':

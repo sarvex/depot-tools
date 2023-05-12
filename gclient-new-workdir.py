@@ -49,10 +49,10 @@ def parse_options():
   new_workdir = sys.argv[2]
 
   if not os.path.exists(repository):
-    usage('Repository does not exist: ' + repository)
+    usage(f'Repository does not exist: {repository}')
 
   if os.path.exists(new_workdir):
-    usage('New workdir already exists: ' + new_workdir)
+    usage(f'New workdir already exists: {new_workdir}')
 
   return repository, new_workdir
 
@@ -62,7 +62,7 @@ def main():
 
   gclient = os.path.join(repository, '.gclient')
   if not os.path.exists(gclient):
-    print_err('No .gclient file: ' + gclient)
+    print_err(f'No .gclient file: {gclient}')
 
   os.makedirs(new_workdir)
   os.symlink(gclient, os.path.join(new_workdir, '.gclient'))
@@ -75,7 +75,7 @@ def main():
 
 
 def make_workdir(repository, new_workdir):
-  print('Creating: ' + new_workdir)
+  print(f'Creating: {new_workdir}')
   os.makedirs(new_workdir)
 
   GIT_DIRECTORY_WHITELIST = [

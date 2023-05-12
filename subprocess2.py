@@ -40,10 +40,9 @@ class CalledProcessError(subprocess.CalledProcessError):
     self.cwd = cwd
 
   def __str__(self):
-    out = 'Command %s returned non-zero exit status %s' % (
-        ' '.join(self.cmd), self.returncode)
+    out = f"Command {' '.join(self.cmd)} returned non-zero exit status {self.returncode}"
     if self.cwd:
-      out += ' in ' + self.cwd
+      out += f' in {self.cwd}'
     return '\n'.join(filter(None, (out, self.stdout, self.stderr)))
 
 
@@ -336,11 +335,12 @@ class Popen(subprocess.Popen):
     if self.nag_timer:
       def _nag_cb(elapsed):
         logging.warn('  No output for %.0f seconds from command:' % elapsed)
-        logging.warn('    %s' % self.cmd_str)
+        logging.warn(f'    {self.cmd_str}')
         if (self.nag_max and
             int('%.0f' % (elapsed / self.nag_timer)) >= self.nag_max):
           queue.put('timeout')
           done.set()  # Must do this so that timeout thread stops waiting.
+
       nag = NagTimer(self.nag_timer, _nag_cb)
       nag.start()
 

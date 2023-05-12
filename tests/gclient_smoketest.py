@@ -45,7 +45,7 @@ class GClientSmokeBase(FakeReposTestBase):
       cwd = self.root_dir
     if COVERAGE:
       # Don't use the wrapper script.
-      cmd_base = ['coverage', 'run', '-a', GCLIENT_PATH + '.py']
+      cmd_base = ['coverage', 'run', '-a', f'{GCLIENT_PATH}.py']
     else:
       cmd_base = [GCLIENT_PATH]
     cmd = cmd_base + cmd
@@ -63,12 +63,11 @@ class GClientSmokeBase(FakeReposTestBase):
     tasks = {}
     remaining = []
     for line in stdout.splitlines(False):
-      m = re.match(r'^(\d)+>(.*)$', line)
-      if not m:
-        remaining.append(line)
-      else:
+      if m := re.match(r'^(\d)+>(.*)$', line):
         self.assertEquals([], remaining)
-        tasks.setdefault(int(m.group(1)), []).append(m.group(2))
+        tasks.setdefault(int(m[1]), []).append(m[2])
+      else:
+        remaining.append(line)
     out = []
     for key in sorted(tasks.iterkeys()):
       out.extend(tasks[key])
@@ -100,30 +99,22 @@ class GClientSmokeBase(FakeReposTestBase):
       if not line:
         continue
       if line.startswith('__'):
-        match = re.match(r'^________ ([a-z]+) \'(.*)\' in \'(.*)\'$', line)
-        if not match:
-          match = re.match(r'^_____ (.*) is missing, synching instead$', line)
-          if match:
-            # Blah, it's when a dependency is deleted, we should probably not
-            # output this message.
-            results.append([line])
-          elif (
-              not re.match(
-                  r'_____ [^ ]+ : Attempting rebase onto [0-9a-f]+...',
-                  line) and
-              not re.match(r'_____ [^ ]+ at [^ ]+', line)):
-            # The two regexp above are a bit too broad, they are necessary only
-            # for git checkouts.
-            self.fail(line)
-        else:
-          results.append([[match.group(1), match.group(2), match.group(3)]])
-      else:
-        if not results:
-          # TODO(maruel): gclient's git stdout is inconsistent.
-          # This should fail the test instead!!
-          pass
-        else:
-          results[-1].append(line)
+        if match := re.match(r'^________ ([a-z]+) \'(.*)\' in \'(.*)\'$', line):
+          results.append([[match[1], match[2], match[3]]])
+        elif match := re.match(r'^_____ (.*) is missing, synching instead$', line):
+          # Blah, it's when a dependency is deleted, we should probably not
+          # output this message.
+          results.append([line])
+        elif (
+            not re.match(
+                r'_____ [^ ]+ : Attempting rebase onto [0-9a-f]+...',
+                line) and
+            not re.match(r'_____ [^ ]+ at [^ ]+', line)):
+          # The two regexp above are a bit too broad, they are necessary only
+          # for git checkouts.
+          self.fail(line)
+      elif results:
+        results[-1].append(line)
     return results
 
   def checkBlock(self, stdout, items):
@@ -172,16 +163,20 @@ class GClientSmoke(GClientSmokeBase):
     """testHelp: make sure no new command was added."""
     result = self.gclient(['help'])
     # Roughly, not too short, not too long.
-    self.assertTrue(1000 < len(result[0]) and len(result[0]) < 2300,
-                    'Too much written to stdout: %d bytes' % len(result[0]))
+    self.assertTrue(
+        len(result[0]) > 1000 and len(result[0]) < 2300,
+        'Too much written to stdout: %d bytes' % len(result[0]),
+    )
     self.assertEquals(0, len(result[1]))
     self.assertEquals(0, result[2])
 
   def testUnknown(self):
     result = self.gclient(['foo'])
     # Roughly, not too short, not too long.
-    self.assertTrue(1000 < len(result[0]) and len(result[0]) < 2300,
-                    'Too much written to stdout: %d bytes' % len(result[0]))
+    self.assertTrue(
+        len(result[0]) > 1000 and len(result[0]) < 2300,
+        'Too much written to stdout: %d bytes' % len(result[0]),
+    )
     self.assertEquals(0, len(result[1]))
     self.assertEquals(0, result[2])
 
@@ -206,31 +201,35 @@ class GClientSmoke(GClientSmokeBase):
       self.check(('', '', 0), results)
       self.checkString(expected, open(p, 'rU').read())
 
-    test(['config', self.svn_base + 'trunk/src/'],
-         ('solutions = [\n'
-          '  { "name"        : "src",\n'
-          '    "url"         : "%strunk/src",\n'
-          '    "deps_file"   : "DEPS",\n'
-          '    "managed"     : True,\n'
-          '    "custom_deps" : {\n'
-          '    },\n'
-          '    "safesync_url": "",\n'
-          '  },\n'
-          ']\n'
-          'cache_dir = None\n') % self.svn_base)
+    test(
+        ['config', f'{self.svn_base}trunk/src/'],
+        ('solutions = [\n'
+         '  { "name"        : "src",\n'
+         '    "url"         : "%strunk/src",\n'
+         '    "deps_file"   : "DEPS",\n'
+         '    "managed"     : True,\n'
+         '    "custom_deps" : {\n'
+         '    },\n'
+         '    "safesync_url": "",\n'
+         '  },\n'
+         ']\n'
+         'cache_dir = None\n') % self.svn_base,
+    )
 
-    test(['config', self.git_base + 'repo_1', '--name', 'src'],
-         ('solutions = [\n'
-          '  { "name"        : "src",\n'
-          '    "url"         : "%srepo_1",\n'
-          '    "deps_file"   : "DEPS",\n'
-          '    "managed"     : True,\n'
-          '    "custom_deps" : {\n'
-          '    },\n'
-          '    "safesync_url": "",\n'
-          '  },\n'
-          ']\n'
-          'cache_dir = None\n') % self.git_base)
+    test(
+        ['config', f'{self.git_base}repo_1', '--name', 'src'],
+        ('solutions = [\n'
+         '  { "name"        : "src",\n'
+         '    "url"         : "%srepo_1",\n'
+         '    "deps_file"   : "DEPS",\n'
+         '    "managed"     : True,\n'
+         '    "custom_deps" : {\n'
+         '    },\n'
+         '    "safesync_url": "",\n'
+         '  },\n'
+         ']\n'
+         'cache_dir = None\n') % self.git_base,
+    )
 
     test(['config', 'foo', 'faa'],
          'solutions = [\n'
@@ -290,7 +289,7 @@ class GClientSmoke(GClientSmokeBase):
   def testDifferentTopLevelDirectory(self):
     # Check that even if the .gclient file does not mention the directory src
     # itself, but it is included via dependencies, the .gclient file is used.
-    self.gclient(['config', self.svn_base + 'trunk/src.DEPS'])
+    self.gclient(['config', f'{self.svn_base}trunk/src.DEPS'])
     deps = join(self.root_dir, 'src.DEPS')
     os.mkdir(deps)
     write(join(deps, 'DEPS'),
@@ -310,7 +309,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # TODO(maruel): safesync.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     # Test unversioned checkout.
     self.parseGclient(['sync', '--deps', 'mac', '--jobs', '1'],
         ['running', 'running',
@@ -362,7 +361,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     """TODO(maruel): This will become an error soon."""
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     results = self.gclient(
         ['sync', '--deps', 'mac', '-r', 'invalid@1', '--jobs', '1'])
     self.checkBlock(results[0], [
@@ -387,7 +386,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # When no solution name is provided, gclient uses the first solution listed.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.parseGclient(['sync', '--deps', 'mac', '-r', '1', '--jobs', '1'],
                       ['running', 'running', 'running', 'running'])
     tree = self.mangle_svn_tree(
@@ -401,7 +400,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     if not self.enabled:
       return
     # TODO(maruel): safesync.
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     # Test unversioned checkout.
     # Use --jobs 1 otherwise the order is not deterministic.
     self.parseGclient(
@@ -476,11 +475,11 @@ class GClientSmokeSVN(GClientSmokeBase):
         '    },\n'
         '    "safesync_url": "",\n'
         '  },\n'
-        ']\n\n' %
-      { 'base': self.svn_base + 'trunk' })
-    fileobj = open(os.path.join(self.root_dir, '.gclient'), 'w')
-    fileobj.write(out)
-    fileobj.close()
+        ']\n\n' % {
+            'base': f'{self.svn_base}trunk'
+        })
+    with open(os.path.join(self.root_dir, '.gclient'), 'w') as fileobj:
+      fileobj.write(out)
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '1'],
         ['running', 'running', 'running', 'running'],
@@ -506,11 +505,11 @@ class GClientSmokeSVN(GClientSmokeBase):
         '    },\n'
         '    "safesync_url": "",\n'
         '  },\n'
-        ']\n\n' %
-      { 'base': self.svn_base + 'trunk' })
-    fileobj = open(os.path.join(self.root_dir, '.gclient'), 'w')
-    fileobj.write(out)
-    fileobj.close()
+        ']\n\n' % {
+            'base': f'{self.svn_base}trunk'
+        })
+    with open(os.path.join(self.root_dir, '.gclient'), 'w') as fileobj:
+      fileobj.write(out)
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '1'],
         ['running', 'running'],
@@ -523,7 +522,7 @@ class GClientSmokeSVN(GClientSmokeBase):
   def testRevertAndStatus(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     # Tested in testSync.
     self.gclient(['sync', '--deps', 'mac'])
     write(join(self.root_dir, 'src', 'other', 'hi'), 'Hey!')
@@ -573,7 +572,7 @@ class GClientSmokeSVN(GClientSmokeBase):
   def testRevertAndStatusDepsOs(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     # Tested in testSync.
     self.gclient(['sync', '--deps', 'mac', '--revision', 'src@1'])
     write(join(self.root_dir, 'src', 'other', 'hi'), 'Hey!')
@@ -636,7 +635,7 @@ class GClientSmokeSVN(GClientSmokeBase):
   def testRunHooks(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync', '--deps', 'mac'])
     out = self.parseGclient(['runhooks', '--deps', 'mac'],
                             ['running', 'running'])
@@ -646,7 +645,7 @@ class GClientSmokeSVN(GClientSmokeBase):
   def testRunHooksDepsOs(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync', '--deps', 'mac', '--revision', 'src@1'])
     out = self.parseGclient(['runhooks', '--deps', 'mac'], [])
     self.assertEquals([], out)
@@ -654,21 +653,23 @@ class GClientSmokeSVN(GClientSmokeBase):
   def testRevInfo(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync', '--deps', 'mac'])
     results = self.gclient(['revinfo', '--deps', 'mac'])
     out = ('src: %(base)s/src\n'
            'src/file/other: File("%(base)s/other/DEPS")\n'
            'src/other: %(base)s/other\n'
-           'src/third_party/foo: %(base)s/third_party/foo@1\n' %
-          { 'base': self.svn_base + 'trunk' })
+           'src/third_party/foo: %(base)s/third_party/foo@1\n' % {
+               'base': f'{self.svn_base}trunk'
+           })
     self.check((out, '', 0), results)
     results = self.gclient(['revinfo', '--deps', 'mac', '--actual'])
     out = ('src: %(base)s/src@2\n'
            'src/file/other: %(base)s/other/DEPS@2\n'
            'src/other: %(base)s/other@2\n'
-           'src/third_party/foo: %(base)s/third_party/foo@1\n' %
-          { 'base': self.svn_base + 'trunk' })
+           'src/third_party/foo: %(base)s/third_party/foo@1\n' % {
+               'base': f'{self.svn_base}trunk'
+           })
     self.check((out, '', 0), results)
     results = self.gclient(['revinfo', '--deps', 'mac', '--snapshot'])
     out = ('# Snapshot generated with gclient revinfo --snapshot\n'
@@ -683,19 +684,20 @@ class GClientSmokeSVN(GClientSmokeBase):
            '      "src/file/other": \'%(base)s/other/DEPS@2\',\n'
            '      "src/other": \'%(base)s/other@2\',\n'
            '      "src/third_party/foo": '
-               '\'%(base)s/third_party/foo@1\',\n'
+           '\'%(base)s/third_party/foo@1\',\n'
            '    },\n'
            '    "safesync_url": "",\n'
            '  },\n'
-           ']\n\n' %
-          { 'base': self.svn_base + 'trunk' })
+           ']\n\n' % {
+               'base': f'{self.svn_base}trunk'
+           })
     self.check((out, '', 0), results)
 
   def testRevInfoAltDeps(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/', '--deps-file',
-                  'DEPS.alt'])
+    self.gclient(
+        ['config', f'{self.svn_base}trunk/src/', '--deps-file', 'DEPS.alt'])
     self.gclient(['sync'])
     results = self.gclient(['revinfo', '--snapshot'])
     out = ('# Snapshot generated with gclient revinfo --snapshot\n'
@@ -711,8 +713,9 @@ class GClientSmokeSVN(GClientSmokeBase):
            '    },\n'
            '    "safesync_url": "",\n'
            '  },\n'
-           ']\n\n' %
-          { 'base': self.svn_base + 'trunk' })
+           ']\n\n' % {
+               'base': f'{self.svn_base}trunk'
+           })
     self.check((out, '', 0), results)
 
 
@@ -721,7 +724,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # about a subdirectory src when we're in a different subdirectory src-other.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync'])
     other_src = join(self.root_dir, 'src-other')
     os.mkdir(other_src)
@@ -733,7 +736,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # is used.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync'])
     src = join(self.root_dir, 'src')
     res = self.gclient(['status', '--jobs', '1'], src)
@@ -744,7 +747,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # done yet.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.parseGclient(
         ['sync', '--jobs', '1'],
         ['running', 'running',
@@ -758,7 +761,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # initial checkout has failed.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     self.gclient(['sync'])
     # Cripple the checkout.
     os.remove(join(self.root_dir, '.gclient_entries'))
@@ -771,7 +774,7 @@ class GClientSmokeSVN(GClientSmokeBase):
     # Check that gclient automatically deletes crippled SVN repositories.
     if not self.enabled:
       return
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
     cmd = ['sync', '--jobs', '1', '--delete_unversioned_trees', '--reset']
     self.assertEquals(0, self.gclient(cmd)[-1])
     third_party = join(self.root_dir, 'src', 'third_party')
@@ -794,7 +797,7 @@ class GClientSmokeSVNTransitive(GClientSmokeBase):
     if not self.enabled:
       return
 
-    self.gclient(['config', self.svn_base + 'trunk/src/'])
+    self.gclient(['config', f'{self.svn_base}trunk/src/'])
 
     def test_case(parent, timestamp, fixed, output):
       # We check out revision 'parent' and expect the following:
@@ -848,7 +851,7 @@ class GClientSmokeGIT(GClientSmokeBase):
     if not self.enabled:
       return
     # TODO(maruel): safesync.
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     # Test unversioned checkout.
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '1'],
@@ -895,7 +898,7 @@ class GClientSmokeGIT(GClientSmokeBase):
     """TODO(maruel): This will become an error soon."""
     if not self.enabled:
       return
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '1',
          '--revision', 'invalid@' + self.githash('repo_1', 1)],
@@ -913,7 +916,7 @@ class GClientSmokeGIT(GClientSmokeBase):
     if not self.enabled:
       return
     # When no solution name is provided, gclient uses the first solution listed.
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '1',
          '--revision', self.githash('repo_1', 1)],
@@ -928,7 +931,7 @@ class GClientSmokeGIT(GClientSmokeBase):
     if not self.enabled:
       return
     # TODO(maruel): safesync.
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     # Test unversioned checkout.
     self.parseGclient(
         ['sync', '--deps', 'mac', '--jobs', '8'],
@@ -977,7 +980,7 @@ class GClientSmokeGIT(GClientSmokeBase):
   def testRunHooks(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     self.gclient(['sync', '--deps', 'mac'])
     tree = self.mangle_git_tree(('repo_1@2', 'src'),
                                 ('repo_2@1', 'src/repo2'),
@@ -1003,7 +1006,7 @@ class GClientSmokeGIT(GClientSmokeBase):
   def testPreDepsHooks(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.git_base + 'repo_5', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_5', '--name', 'src'])
     expectation = [
         ('running', self.root_dir),                 # pre-deps hook
     ]
@@ -1053,7 +1056,7 @@ class GClientSmokeGIT(GClientSmokeBase):
   def testPreDepsHooksError(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.git_base + 'repo_5', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_5', '--name', 'src'])
     expectated_stdout = [
         ('running', self.root_dir),                 # pre-deps hook
         ('running', self.root_dir),                 # pre-deps hook (fails)
@@ -1071,7 +1074,7 @@ class GClientSmokeGIT(GClientSmokeBase):
   def testRevInfo(self):
     if not self.enabled:
       return
-    self.gclient(['config', self.git_base + 'repo_1', '--name', 'src'])
+    self.gclient(['config', f'{self.git_base}repo_1', '--name', 'src'])
     self.gclient(['sync', '--deps', 'mac'])
     results = self.gclient(['revinfo', '--deps', 'mac'])
     out = ('src: %(base)srepo_1\n'
@@ -1234,13 +1237,20 @@ class GClientSmokeBoth(GClientSmokeBase):
         ' "url": "' + self.svn_base + 'trunk/src/"},'
         '{"name": "src-git",'
         '"url": "' + self.git_base + 'repo_1"}]'])
-    self.parseGclient(['sync', '--deps', 'mac', '--jobs', '1'],
-        ['running', 'running',
-         # This is due to the way svn update is called for a single
-         # file when File() is used in a DEPS file.
-         ('running', self.root_dir + '/src/file/other'),
-         'running', 'running', 'running', 'running',
-         'running', 'running'])
+    self.parseGclient(
+        ['sync', '--deps', 'mac', '--jobs', '1'],
+        [
+            'running',
+            'running',
+            ('running', f'{self.root_dir}/src/file/other'),
+            'running',
+            'running',
+            'running',
+            'running',
+            'running',
+            'running',
+        ],
+    )
     tree = self.mangle_git_tree(('repo_1@2', 'src-git'),
                                 ('repo_2@1', 'src/repo2'),
                                 ('repo_3@2', 'src/repo2/repo_renamed'))
@@ -1331,11 +1341,11 @@ class GClientSmokeBoth(GClientSmokeBase):
            'src/other: %(svn_base)s/other\n'
            'src/repo2: %(git_base)srepo_2@%(hash2)s\n'
            'src/repo2/repo_renamed: %(git_base)srepo_3\n'
-           'src/third_party/foo: %(svn_base)s/third_party/foo@1\n') % {
-               'svn_base': self.svn_base + 'trunk',
+           'src/third_party/foo: %(svn_base)s/third_party/foo@1\n' % {
+               'svn_base': f'{self.svn_base}trunk',
                'git_base': self.git_base,
                'hash2': self.githash('repo_2', 1)[:7],
-          }
+           })
     self.check((out, '', 0), results)
     results = self.gclient(['revinfo', '--deps', 'mac', '--actual'])
     out = ('src: %(svn_base)s/src/@2\n'
@@ -1344,13 +1354,13 @@ class GClientSmokeBoth(GClientSmokeBase):
            'src/other: %(svn_base)s/other@2\n'
            'src/repo2: %(git_base)srepo_2@%(hash2)s\n'
            'src/repo2/repo_renamed: %(git_base)srepo_3@%(hash3)s\n'
-           'src/third_party/foo: %(svn_base)s/third_party/foo@1\n') % {
-               'svn_base': self.svn_base + 'trunk',
+           'src/third_party/foo: %(svn_base)s/third_party/foo@1\n' % {
+               'svn_base': f'{self.svn_base}trunk',
                'git_base': self.git_base,
                'hash1': self.githash('repo_1', 2),
                'hash2': self.githash('repo_2', 1),
                'hash3': self.githash('repo_3', 2),
-          }
+           })
     self.check((out, '', 0), results)
 
   def testRecurse(self):
@@ -1414,10 +1424,10 @@ class SkiaDEPSTransitionSmokeTest(GClientSmokeBase):
     skia_include = os.path.join(skia, 'include')
     skia_src = os.path.join(skia, 'src')
 
-    gyp_svn_url = self.svn_base + 'skia/gyp'
-    include_svn_url = self.svn_base + 'skia/include'
-    src_svn_url = self.svn_base + 'skia/src'
-    skia_git_url = self.git_base + 'repo_1'
+    gyp_svn_url = f'{self.svn_base}skia/gyp'
+    include_svn_url = f'{self.svn_base}skia/include'
+    src_svn_url = f'{self.svn_base}skia/src'
+    skia_git_url = f'{self.git_base}repo_1'
 
     # Initial sync. Verify that we get the expected checkout.
     res = self.gclient(['sync', '--deps', 'mac', '--revision', 'src@2'])
@@ -1481,17 +1491,16 @@ class SkiaDEPSTransitionSmokeTest(GClientSmokeBase):
     skia_include = os.path.join(skia, 'include')
     skia_src = os.path.join(skia, 'src')
 
-    gyp_git_url = self.git_base + 'repo_3'
-    include_git_url = self.git_base + 'repo_4'
-    src_git_url = self.git_base + 'repo_5'
-    skia_git_url = self.FAKE_REPOS.git_base + 'repo_1'
+    gyp_git_url = f'{self.git_base}repo_3'
+    include_git_url = f'{self.git_base}repo_4'
+    src_git_url = f'{self.git_base}repo_5'
+    skia_git_url = f'{self.FAKE_REPOS.git_base}repo_1'
 
     pre_hash = self.githash('repo_2', 1)
     post_hash = self.githash('repo_2', 2)
 
     # Initial sync. Verify that we get the expected checkout.
-    res = self.gclient(['sync', '--deps', 'mac', '--revision',
-                        'src@%s' % pre_hash])
+    res = self.gclient(['sync', '--deps', 'mac', '--revision', f'src@{pre_hash}'])
     self.assertEqual(res[2], 0, 'Initial sync failed.')
     self.assertEqual(gclient_scm.GIT.Capture(['config', 'remote.origin.url'],
                                              skia_gyp), gyp_git_url)
@@ -1502,22 +1511,19 @@ class SkiaDEPSTransitionSmokeTest(GClientSmokeBase):
 
     # Verify that the sync succeeds. Verify that we have the  expected merged
     # checkout.
-    res = self.gclient(['sync', '--deps', 'mac', '--revision',
-                        'src@%s' % post_hash])
+    res = self.gclient(['sync', '--deps', 'mac', '--revision', f'src@{post_hash}'])
     self.assertEqual(res[2], 0, 'DEPS change sync failed.')
     self.assertEqual(gclient_scm.GIT.Capture(['config', 'remote.origin.url'],
                                              skia), skia_git_url)
 
     # Sync again. Verify that we still have the expected merged checkout.
-    res = self.gclient(['sync', '--deps', 'mac', '--revision',
-                        'src@%s' % post_hash])
+    res = self.gclient(['sync', '--deps', 'mac', '--revision', f'src@{post_hash}'])
     self.assertEqual(res[2], 0, 'Subsequent sync failed.')
     self.assertEqual(gclient_scm.GIT.Capture(['config', 'remote.origin.url'],
                                              skia), skia_git_url)
 
     # Sync back to the original DEPS. Verify that we get the original structure.
-    res = self.gclient(['sync', '--deps', 'mac', '--revision',
-                        'src@%s' % pre_hash])
+    res = self.gclient(['sync', '--deps', 'mac', '--revision', f'src@{pre_hash}'])
     self.assertEqual(res[2], 0, 'Reverse sync failed.')
     self.assertEqual(gclient_scm.GIT.Capture(['config', 'remote.origin.url'],
                                              skia_gyp), gyp_git_url)
@@ -1527,8 +1533,7 @@ class SkiaDEPSTransitionSmokeTest(GClientSmokeBase):
                                              skia_src), src_git_url)
 
     # Sync again. Verify that we still have the original structure.
-    res = self.gclient(['sync', '--deps', 'mac', '--revision',
-                        'src@%s' % pre_hash])
+    res = self.gclient(['sync', '--deps', 'mac', '--revision', f'src@{pre_hash}'])
     self.assertEqual(res[2], 0, 'Subsequent sync #2 failed.')
     self.assertEqual(gclient_scm.GIT.Capture(['config', 'remote.origin.url'],
                                              skia_gyp), gyp_git_url)
@@ -1549,7 +1554,7 @@ class BlinkDEPSTransitionSmokeTest(GClientSmokeBase):
     self.enabled = self.FAKE_REPOS.set_up_git()
     self.checkout_path = os.path.join(self.root_dir, 'src')
     self.blink = os.path.join(self.checkout_path, 'third_party', 'WebKit')
-    self.blink_git_url = self.FAKE_REPOS.git_base + 'repo_2'
+    self.blink_git_url = f'{self.FAKE_REPOS.git_base}repo_2'
     self.pre_merge_sha = self.githash('repo_1', 1)
     self.post_merge_sha = self.githash('repo_1', 2)
 
@@ -1596,13 +1601,13 @@ class BlinkDEPSTransitionSmokeTest(GClientSmokeBase):
 
     # Go back and forth two times.
     for _ in xrange(2):
-      res = self.gclient(['sync', '--jobs', '1',
-                          '--revision', 'src@%s' % self.pre_merge_sha])
+      res = self.gclient(
+          ['sync', '--jobs', '1', '--revision', f'src@{self.pre_merge_sha}'])
       self.assertEqual(res[2], 0, 'DEPS change sync failed.')
       self.CheckStatusPreMergePoint()
 
-      res = self.gclient(['sync', '--jobs', '1',
-                          '--revision', 'src@%s' % self.post_merge_sha])
+      res = self.gclient(
+          ['sync', '--jobs', '1', '--revision', f'src@{self.post_merge_sha}'])
       self.assertEqual(res[2], 0, 'DEPS change sync failed.')
       self.CheckStatusPostMergePoint()
 
@@ -1652,7 +1657,7 @@ class BlinkDEPSTransitionSmokeTest(GClientSmokeBase):
         '}]'])
 
     # Initialize to pre-merge point.
-    self.gclient(['sync', '--revision', 'src@%s' % self.pre_merge_sha])
+    self.gclient(['sync', '--revision', f'src@{self.pre_merge_sha}'])
     self.CheckStatusPreMergePoint()
 
     # Create a branch named "foo".
@@ -1660,11 +1665,11 @@ class BlinkDEPSTransitionSmokeTest(GClientSmokeBase):
                            cwd=self.blink)
 
     # Cross the pre-merge point.
-    self.gclient(['sync', '--revision', 'src@%s' % self.post_merge_sha])
+    self.gclient(['sync', '--revision', f'src@{self.post_merge_sha}'])
     self.CheckStatusPostMergePoint()
 
     # Go backwards and check that we still have the foo branch.
-    self.gclient(['sync', '--revision', 'src@%s' % self.pre_merge_sha])
+    self.gclient(['sync', '--revision', f'src@{self.pre_merge_sha}'])
     self.CheckStatusPreMergePoint()
     subprocess2.check_call(
         ['git', 'show-ref', '-q', '--verify', 'refs/heads/foo'], cwd=self.blink)
@@ -1678,11 +1683,19 @@ class GClientSmokeFromCheckout(GClientSmokeBase):
     os.rmdir(self.root_dir)
     if self.enabled:
       usr, pwd = self.FAKE_REPOS.USERS[0]
-      subprocess2.check_call(
-          ['svn', 'checkout', self.svn_base + '/trunk/webkit',
-           self.root_dir, '-q',
-           '--non-interactive', '--no-auth-cache',
-           '--username', usr, '--password', pwd])
+      subprocess2.check_call([
+          'svn',
+          'checkout',
+          f'{self.svn_base}/trunk/webkit',
+          self.root_dir,
+          '-q',
+          '--non-interactive',
+          '--no-auth-cache',
+          '--username',
+          usr,
+          '--password',
+          pwd,
+      ])
 
   def testSync(self):
     if not self.enabled:

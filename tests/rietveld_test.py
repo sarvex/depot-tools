@@ -73,7 +73,6 @@ class BaseFixture(unittest.TestCase):
       is_new=False,
       patchlevel=0,
       svn_properties=None):
-    svn_properties = svn_properties or []
     self.assertEqual(p.filename, filename)
     self.assertEqual(p.source_filename, source_filename)
     self.assertEqual(p.is_binary, is_binary)
@@ -86,6 +85,7 @@ class BaseFixture(unittest.TestCase):
     if diff:
       self.assertEqual(p.get(True), diff)
     if hasattr(p, 'svn_properties'):
+      svn_properties = svn_properties or []
       self.assertEqual(p.svn_properties, svn_properties)
 
 
@@ -464,15 +464,19 @@ class DefaultTimeoutTest(auto_stub.TestCase):
     with self.assertRaises(ProbeException) as cm:
       self.rietveld.get('/api/1234')
 
-    self.assertIsNotNone(cm.exception.value, 'Rietveld timeout was not set: %s'
-                         % traceback.format_exc())
+    self.assertIsNotNone(
+        cm.exception.value,
+        f'Rietveld timeout was not set: {traceback.format_exc()}',
+    )
 
   def test_timeout_post(self):
     with self.assertRaises(ProbeException) as cm:
       self.rietveld.post('/api/1234', [('key', 'data')])
 
-    self.assertIsNotNone(cm.exception.value, 'Rietveld timeout was not set: %s'
-                         % traceback.format_exc())
+    self.assertIsNotNone(
+        cm.exception.value,
+        f'Rietveld timeout was not set: {traceback.format_exc()}',
+    )
 
   def MockSleep(self, t):
     self.sleep_time = t

@@ -71,8 +71,10 @@ def CheckDoNotSubmitInDescription(input_api, output_api):
   """
   keyword = 'DO NOT ''SUBMIT'
   if keyword in input_api.change.DescriptionText():
-    return [output_api.PresubmitError(
-        keyword + ' is present in the changelist description.')]
+    return [
+        output_api.PresubmitError(
+            f'{keyword} is present in the changelist description.')
+    ]
   else:
     return []
 
@@ -105,8 +107,7 @@ def CheckDoNotSubmitInFiles(input_api, output_api):
   keyword = 'DO NOT ''SUBMIT'
   errors = _FindNewViolationsOfRule(lambda _, line : keyword not in line,
                                     input_api, file_filter)
-  text = '\n'.join('Found %s in %s' % (keyword, loc) for loc in errors)
-  if text:
+  if text := '\n'.join(f'Found {keyword} in {loc}' for loc in errors):
     return [output_api.PresubmitError(text)]
   return []
 
@@ -131,11 +132,7 @@ def CheckChangeLintsClean(input_api, output_api, source_file_filter=None,
   files = [f.AbsoluteLocalPath() for f in
            input_api.AffectedSourceFiles(source_file_filter)]
   for file_name in files:
-    if _RE_IS_TEST.match(file_name):
-      level = 5
-    else:
-      level = 4
-
+    level = 5 if _RE_IS_TEST.match(file_name) else 4
     verbose_level = verbose_level or level
     cpplint.ProcessFile(file_name, verbose_level)
 
@@ -151,11 +148,10 @@ def CheckChangeLintsClean(input_api, output_api, source_file_filter=None,
 
 def CheckChangeHasNoCR(input_api, output_api, source_file_filter=None):
   """Checks no '\r' (CR) character is in any source files."""
-  cr_files = []
-  for f in input_api.AffectedSourceFiles(source_file_filter):
-    if '\r' in input_api.ReadFile(f, 'rb'):
-      cr_files.append(f.LocalPath())
-  if cr_files:
+  if cr_files := [
+      f.LocalPath() for f in input_api.AffectedSourceFiles(source_file_filter)
+      if '\r' in input_api.ReadFile(f, 'rb')
+  ]:
     return [output_api.PresubmitPromptWarning(
         'Found a CR character in these files:', items=cr_files)]
   return []
@@ -191,9 +187,11 @@ def CheckSvnModifiedDirectories(input_api, output_api, source_file_filter=None):
           error_type = output_api.PresubmitPromptWarning
         else:
           error_type = output_api.PresubmitNotifyResult
-        errors.append(error_type(
-            'Potential accidental commits in changelist %s:' % f.LocalPath(),
-            items=bad_files))
+        errors.append(
+            error_type(
+                f'Potential accidental commits in changelist {f.LocalPath()}:',
+                items=bad_files,
+            ))
   return errors
 
 
@@ -241,7 +239,7 @@ def CheckChangeHasNoCrAndHasOnlyOneEol(input_api, output_api,
 
 def _ReportErrorFileAndLine(filename, line_num, dummy_line):
   """Default error formatter for _FindNewViolationsOfRule."""
-  return '%s:%s' % (filename, line_num)
+  return f'{filename}:{line_num}'
 
 
 def _FindNewViolationsOfRule(callable_rule, input_api, source_file_filter=None,
@@ -270,10 +268,10 @@ def _FindNewViolationsOfRule(callable_rule, input_api, source_file_filter=None,
     if all(callable_rule(extension, line) for line in f.NewContents()):
       continue  # No violation found in full text: can skip considering diff.
 
-    for line_num, line in f.ChangedContents():
-      if not callable_rule(extension, line):
-        errors.append(error_formatter(f.LocalPath(), line_num, line))
-
+    errors.extend(
+        error_formatter(f.LocalPath(), line_num, line)
+        for line_num, line in f.ChangedContents()
+        if not callable_rule(extension, line))
   return errors
 
 
@@ -287,9 +285,9 @@ def CheckChangeHasNoTabs(input_api, output_api, source_file_filter=None):
     source_file_filter = input_api.FilterSourceFile
   def filter_more(affected_file):
     basename = input_api.os_path.basename(affected_file.LocalPath())
-    return (not (basename in ('Makefile', 'makefile') or
-                 basename.endswith('.mk')) and
-            source_file_filter(affected_file))
+    return (basename not in ('Makefile', 'makefile')
+            and not basename.endswith('.mk')
+            and source_file_filter(affected_file))
 
   tabs = _FindNewViolationsOfRule(lambda _, line : '\t' not in line,
                                   input_api, filter_more)
@@ -306,8 +304,7 @@ def CheckChangeTodoHasOwner(input_api, output_api, source_file_filter=None):
   unowned_todo = input_api.re.compile('TO''DO[^(]')
   errors = _FindNewViolationsOfRule(lambda _, x : not unowned_todo.search(x),
                                     input_api, source_file_filter)
-  errors = ['Found TO''DO with no owner in ' + x for x in errors]
-  if errors:
+  if errors := [f'Found TODO with no owner in {x}' for x in errors]:
     return [output_api.PresubmitPromptWarning('\n'.join(errors))]
   return []
 
@@ -315,9 +312,8 @@ def CheckChangeTodoHasOwner(input_api, output_api, source_file_filter=None):
 def CheckChangeHasNoStrayWhitespace(input_api, output_api,
                                     source_file_filter=None):
   """Checks that there is no stray whitespace at source lines end."""
-  errors = _FindNewViolationsOfRule(lambda _, line : line.rstrip() == line,
-                                    input_api, source_file_filter)
-  if errors:
+  if errors := _FindNewViolationsOfRule(lambda _, line: line.rstrip() == line,
+                                        input_api, source_file_filter):
     return [output_api.PresubmitPromptWarning(
         'Found line ending with white spaces in:',
         long_text='\n'.join(errors))]
@@ -385,13 +381,13 @@ def CheckLongLines(input_api, output_api, maxlen, source_file_filter=None):
         r'.*[A-Za-z][A-Za-z_0-9]{%d,}.*' % long_symbol, line)
 
   def format_error(filename, line_num, line):
-    return '%s, line %s, %s chars' % (filename, line_num, len(line))
+    return f'{filename}, line {line_num}, {len(line)} chars'
 
   errors = _FindNewViolationsOfRule(no_long_lines, input_api,
                                     source_file_filter,
                                     error_formatter=format_error)
   if errors:
-    msg = 'Found lines longer than %s characters (first 5 shown).' % maxlen
+    msg = f'Found lines longer than {maxlen} characters (first 5 shown).'
     return [output_api.PresubmitPromptWarning(msg, items=errors[:5])]
   else:
     return []
@@ -456,8 +452,7 @@ def CheckSvnProperty(input_api, output_api, prop, expected, affected_files):
   if input_api.change.scm != 'svn':
     return []
 
-  bad = filter(lambda f: f.Property(prop) != expected, affected_files)
-  if bad:
+  if bad := filter(lambda f: f.Property(prop) != expected, affected_files):
     if input_api.is_committing:
       res_type = output_api.PresubmitError
     else:
@@ -648,7 +643,7 @@ def GetPythonUnitTests(input_api, output_api, unit_tests):
       if env.get('PYTHONPATH'):
         backpath.append(env.get('PYTHONPATH'))
       env['PYTHONPATH'] = input_api.os_path.pathsep.join((backpath))
-    cmd = [input_api.python_executable, '-m', '%s' % unit_test]
+    cmd = [input_api.python_executable, '-m', f'{unit_test}']
     results.append(input_api.Command(
         name=unit_test_name,
         cmd=cmd,
@@ -743,13 +738,14 @@ def GetPylint(input_api, output_api, white_list=None, black_list=None,
     prefix = input_api.os_path.join(input_api.os_path.relpath(
         input_api.PresubmitLocalPath(), input_api.change.RepositoryRoot()), '')
     return input_api.re.escape(prefix) + regex
+
   src_filter = lambda x: input_api.FilterSourceFile(
       x, map(rel_path, white_list), map(rel_path, black_list))
   if not input_api.AffectedSourceFiles(src_filter):
     input_api.logging.info('Skipping pylint: no matching changes.')
     return []
 
-  extra_args = ['--rcfile=%s' % input_api.os_path.join(_HERE, 'pylintrc')]
+  extra_args = [f"--rcfile={input_api.os_path.join(_HERE, 'pylintrc')}"]
   if disabled_warnings:
     extra_args.extend(['-d', ','.join(disabled_warnings)])
 
@@ -771,18 +767,20 @@ def GetPylint(input_api, output_api, white_list=None, black_list=None,
     # Windows needs help running python files so we explicitly specify
     # the interpreter to use. It also has limitations on the size of
     # the command-line, so we pass arguments via a pipe.
-    if len(files) == 1:
-      description = files[0]
-    else:
-      description = '%s files' % len(files)
-
+    description = files[0] if len(files) == 1 else f'{len(files)} files'
     return input_api.Command(
-        name='Pylint (%s)' % description,
-        cmd=[input_api.python_executable,
-             input_api.os_path.join(_HERE, 'third_party', 'pylint.py'),
-             '--args-on-stdin'],
-        kwargs={'env': env, 'stdin': '\n'.join(files + extra_args)},
-        message=error_type)
+        name=f'Pylint ({description})',
+        cmd=[
+            input_api.python_executable,
+            input_api.os_path.join(_HERE, 'third_party', 'pylint.py'),
+            '--args-on-stdin',
+        ],
+        kwargs={
+            'env': env,
+            'stdin': '\n'.join(files + extra_args)
+        },
+        message=error_type,
+    )
 
   # Always run pylint and pass it all the py files at once.
   # Passing py files one at time is slower and can produce
@@ -823,7 +821,7 @@ def CheckBuildbotPendingBuilds(input_api, output_api, url, max_pendings,
     raw_data = connection.read()
     connection.close()
   except IOError:
-    return [output_api.PresubmitNotifyResult('%s is not accessible' % url)]
+    return [output_api.PresubmitNotifyResult(f'{url} is not accessible')]
 
   try:
     data = input_api.json.loads(raw_data)
@@ -863,8 +861,10 @@ def CheckOwners(input_api, output_api, source_file_filter=None):
     needed = 'OWNER reviewers'
     output = output_api.PresubmitNotifyResult
 
-  affected_files = set([f.LocalPath() for f in
-      input_api.change.AffectedFiles(file_filter=source_file_filter)])
+  affected_files = {
+      f.LocalPath()
+      for f in input_api.change.AffectedFiles(file_filter=source_file_filter)
+  }
 
   owners_db = input_api.owners_db
   owner_email, reviewers = _RietveldOwnerAndReviewers(
@@ -875,7 +875,7 @@ def CheckOwners(input_api, output_api, source_file_filter=None):
   owner_email = owner_email or input_api.change.author_email
 
   if owner_email:
-    reviewers_plus_owner = set([owner_email]).union(reviewers)
+    reviewers_plus_owner = {owner_email}.union(reviewers)
     missing_files = owners_db.files_not_covered_by(affected_files,
         reviewers_plus_owner)
   else:
@@ -893,7 +893,7 @@ def CheckOwners(input_api, output_api, source_file_filter=None):
     return output_list
 
   if input_api.is_committing and not reviewers:
-    return [output('Missing LGTM from someone other than %s' % owner_email)]
+    return [output(f'Missing LGTM from someone other than {owner_email}')]
   return []
 
 
@@ -909,12 +909,12 @@ def _ReviewersFromChange(change):
   """Return the reviewers specified in the |change|, if any."""
   reviewers = set()
   if change.R:
-    reviewers.update(set([r.strip() for r in change.R.split(',')]))
+    reviewers.update({r.strip() for r in change.R.split(',')})
   if change.TBR:
-    reviewers.update(set([r.strip() for r in change.TBR.split(',')]))
+    reviewers.update({r.strip() for r in change.TBR.split(',')})
 
   # Drop reviewers that aren't specified in email address format.
-  return set(reviewer for reviewer in reviewers if '@' in reviewer)
+  return {reviewer for reviewer in reviewers if '@' in reviewer}
 
 
 def _RietveldOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
@@ -939,9 +939,10 @@ def _RietveldOwnerAndReviewers(input_api, email_regexp, approval_needed=False):
     return email_regexp.match(r) and r != owner_email
 
   messages = issue_props.get('messages', [])
-  approvers = set(
-      m['sender'] for m in messages
-      if m.get('approval') and match_reviewer(m['sender']))
+  approvers = {
+      m['sender']
+      for m in messages if m.get('approval') and match_reviewer(m['sender'])
+  }
 
   return owner_email, approvers
 
@@ -1122,9 +1123,10 @@ def CheckGNFormatted(input_api, output_api):
     cmd = ['gn', 'format', '--dry-run', f.AbsoluteLocalPath()]
     rc = gn.main(cmd)
     if rc == 2:
-      warnings.append(output_api.PresubmitPromptWarning(
-          '%s requires formatting. Please run `gn format --in-place %s`.' % (
-              f.AbsoluteLocalPath(), f.LocalPath())))
+      warnings.append(
+          output_api.PresubmitPromptWarning(
+              f'{f.AbsoluteLocalPath()} requires formatting. Please run `gn format --in-place {f.LocalPath()}`.'
+          ))
   # It's just a warning, so ignore other types of failures assuming they'll be
   # caught elsewhere.
   return warnings

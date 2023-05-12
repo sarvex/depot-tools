@@ -31,9 +31,9 @@ def FindClangFormatToolInChromiumTree():
         'Could not find checkout in any parent of the current path.')
 
   tool_path = os.path.join(bin_path,
-                           'clang-format' + gclient_utils.GetExeSuffix())
+                           f'clang-format{gclient_utils.GetExeSuffix()}')
   if not os.path.exists(tool_path):
-    raise NotFoundError('File does not exist: %s' % tool_path)
+    raise NotFoundError(f'File does not exist: {tool_path}')
   return tool_path
 
 
@@ -45,7 +45,7 @@ def FindClangFormatScriptInChromiumTree(script_name):
         'Could not find checkout in any parent of the current path.')
   script_path = os.path.join(tools_path, 'clang_format', 'script', script_name)
   if not os.path.exists(script_path):
-    raise NotFoundError('File does not exist: %s' % script_path)
+    raise NotFoundError(f'File does not exist: {script_path}')
   return script_path
 
 

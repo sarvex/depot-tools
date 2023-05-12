@@ -48,9 +48,7 @@ def convert_to_cr(string):
 
 def convert_win(string):
   """Converts string to CRLF on Windows only."""
-  if sys.platform == 'win32':
-    return string.replace('\n', '\r\n')
-  return string
+  return string.replace('\n', '\r\n') if sys.platform == 'win32' else string
 
 
 class DefaultsTest(auto_stub.TestCase):
@@ -70,16 +68,21 @@ class DefaultsTest(auto_stub.TestCase):
   def _fake_Popen(self):
     """Mocks the whole subprocess2.Popen class."""
     results = {}
+
+
     class fake_Popen(object):
       returncode = -8
       def __init__(self, args, **kwargs):
         assert not results
-        results.update(kwargs)
+        results |= kwargs
         results['args'] = args
+
       @staticmethod
       # pylint: disable=W0622
       def communicate(input=None, timeout=None, nag_max=None, nag_timer=None):
         return None, None
+
+
     self.mock(subprocess2, 'Popen', fake_Popen)
     return results
 
@@ -134,11 +137,7 @@ class DefaultsTest(auto_stub.TestCase):
     # Cleanup code in subprocess.py needs this member to be set.
     # pylint: disable=W0201
     proc._child_created = None
-    expected = {
-        'args': ['foo'],
-        'a': True,
-        'shell': bool(sys.platform=='win32'),
-    }
+    expected = {'args': ['foo'], 'a': True, 'shell': sys.platform == 'win32'}
     if sys.platform != 'win32':
       env = os.environ.copy()
       is_english = lambda name: env.get(name, 'en').startswith('en')

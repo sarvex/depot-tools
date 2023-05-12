@@ -86,7 +86,7 @@ def CMDset(parser, args):
   """Sets the commit bit."""
   options, args, obj = parser.parse_args(args)
   if args:
-    parser.error('Unrecognized args: %s' % ' '.join(args))
+    parser.error(f"Unrecognized args: {' '.join(args)}")
   return set_commit(obj, options.issue, '1')
 
 
@@ -95,7 +95,7 @@ def CMDclear(parser, args):
   """Clears the commit bit."""
   options, args, obj = parser.parse_args(args)
   if args:
-    parser.error('Unrecognized args: %s' % ' '.join(args))
+    parser.error(f"Unrecognized args: {' '.join(args)}")
   return set_commit(obj, options.issue, '0')
 
 
@@ -128,7 +128,7 @@ class OptionParser(optparse.OptionParser):
 
 
 def Command(name):
-  return getattr(sys.modules[__name__], 'CMD' + name, None)
+  return getattr(sys.modules[__name__], f'CMD{name}', None)
 
 
 @usage('<command>')
@@ -168,8 +168,7 @@ def main(args=None):
   if args is None:
     args = sys.argv[1:]
   if args:
-    command = Command(args[0])
-    if command:
+    if command := Command(args[0]):
       # "fix" the usage and the description now that we know the subcommand.
       gen_usage(parser, args[0])
       return command(parser, args[1:])

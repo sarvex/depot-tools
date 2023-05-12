@@ -177,7 +177,7 @@ class Provider(object):
         self.configure_headers()
         self.configure_errors()
         # allow config file to override default host
-        host_opt_name = '%s_host' % self.HostKeyMap[self.name]
+        host_opt_name = f'{self.HostKeyMap[self.name]}_host'
         if config.has_option('Credentials', host_opt_name):
             self.host = config.get('Credentials', host_opt_name)
 
@@ -214,21 +214,19 @@ class Provider(object):
     def _credentials_need_refresh(self):
         if self._credential_expiry_time is None:
             return False
-        else:
-            # The credentials should be refreshed if they're going to expire
-            # in less than 5 minutes.
-            delta = self._credential_expiry_time - datetime.utcnow()
-            # python2.6 does not have timedelta.total_seconds() so we have
-            # to calculate this ourselves.  This is straight from the
-            # datetime docs.
-            seconds_left = (
-                (delta.microseconds + (delta.seconds + delta.days * 24 * 3600)
-                 * 10**6) / 10**6)
-            if seconds_left < (5 * 60):
-                boto.log.debug("Credentials need to be refreshed.")
-                return True
-            else:
-                return False
+        # The credentials should be refreshed if they're going to expire
+        # in less than 5 minutes.
+        delta = self._credential_expiry_time - datetime.utcnow()
+        # python2.6 does not have timedelta.total_seconds() so we have
+        # to calculate this ourselves.  This is straight from the
+        # datetime docs.
+        seconds_left = (
+            (delta.microseconds + (delta.seconds + delta.days * 24 * 3600)
+             * 10**6) / 10**6)
+        if seconds_left >= 5 * 60:
+            return False
+        boto.log.debug("Credentials need to be refreshed.")
+        return True
 
     def get_credentials(self, access_key=None, secret_key=None):
         access_key_name, secret_key_name = self.CredentialMap[self.name]
@@ -289,11 +287,7 @@ class Provider(object):
                            self._credential_expiry_time - datetime.now(), expires_at)
 
     def _convert_key_to_str(self, key):
-        if isinstance(key, unicode):
-            # the secret key must be bytes and not unicode to work
-            #  properly with hmac.new (see http://bugs.python.org/issue5285)
-            return str(key)
-        return key
+        return str(key) if isinstance(key, unicode) else key
 
     def configure_headers(self):
         header_info_map = self.HeaderInfoMap[self.name]

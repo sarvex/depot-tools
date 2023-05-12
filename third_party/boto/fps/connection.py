@@ -44,13 +44,16 @@ def complex_amounts(*fields):
         def wrapper(self, *args, **kw):
             for field in filter(kw.has_key, fields):
                 amount = kw.pop(field)
-                kw[field + '.Value'] = getattr(amount, 'Value', str(amount))
-                kw[field + '.CurrencyCode'] = getattr(amount, 'CurrencyCode',
-                                                      self.currencycode)
+                kw[f'{field}.Value'] = getattr(amount, 'Value', str(amount))
+                kw[f'{field}.CurrencyCode'] = getattr(
+                    amount, 'CurrencyCode', self.currencycode
+                )
             return func(self, *args, **kw)
+
         wrapper.__doc__ = "{0}\nComplex Amounts: {1}".format(func.__doc__,
                                                  ', '.join(fields))
         return add_attrs_from(func, to=wrapper)
+
     return decorator
 
 
@@ -88,15 +91,17 @@ def api_action(*api):
     def decorator(func):
         action = ''.join(api or map(str.capitalize, func.func_name.split('_')))
         response = ResponseFactory(action)
-        if hasattr(boto.fps.response, action + 'Response'):
-            response = getattr(boto.fps.response, action + 'Response')
+        if hasattr(boto.fps.response, f'{action}Response'):
+            response = getattr(boto.fps.response, f'{action}Response')
 
         def wrapper(self, *args, **kw):
             return func(self, action, response, *args, **kw)
+
         wrapper.action, wrapper.response = action, response
         wrapper.__doc__ = "FPS {0} API call\n{1}".format(action,
                                                          func.__doc__)
         return wrapper
+
     return decorator
 
 
@@ -189,24 +194,24 @@ class FPSConnection(AWSQueryConnection):
         """Generate a signed URL for the Co-Branded service API given
            arguments as payload.
         """
-        sandbox = 'sandbox' in self.host and 'payments-sandbox' or 'payments'
+        sandbox = 'payments-sandbox' if 'sandbox' in self.host else 'payments'
         endpoint = 'authorize.{0}.amazon.com'.format(sandbox)
         base = '/cobranded-ui/actions/start'
 
         validpipelines = ('SingleUse', 'MultiUse', 'Recurring', 'Recipient',
                           'SetupPrepaid', 'SetupPostpaid', 'EditToken')
         assert kw['pipelineName'] in validpipelines, "Invalid pipelineName"
-        kw.update({
-            'signatureMethod':  'HmacSHA256',
+        kw |= {
+            'signatureMethod': 'HmacSHA256',
             'signatureVersion': '2',
-        })
+        }
         kw.setdefault('callerKey', self.aws_access_key_id)
 
         safestr = lambda x: x is not None and str(x) or ''
         safequote = lambda x: urllib.quote(safestr(x), safe='~')
         payload = sorted([(k, safequote(v)) for k, v in kw.items()])
 
-        encoded = lambda p: '&'.join([k + '=' + v for k, v in p])
+        encoded = lambda p: '&'.join([f'{k}={v}' for k, v in p])
         canonical = '\n'.join(['GET', endpoint, base, encoded(payload)])
         signature = self._auth_handler.sign_string(canonical)
         payload += [('signature', safequote(signature))]
@@ -356,9 +361,8 @@ class FPSConnection(AWSQueryConnection):
         """Cancels a subscription.
         """
         message = "If you specify a RefundAmount, " \
-                  "you must specify CallerReference."
-        assert not 'RefundAmount.Value' in kw \
-                or 'CallerReference' in kw, message
+                      "you must specify CallerReference."
+        assert 'RefundAmount.Value' not in kw or 'CallerReference' in kw, message
         return self.get_object(action, kw, response)
 
     @requires(['TokenId'])

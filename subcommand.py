@@ -67,7 +67,7 @@ def CMDhelp(parser, args):
   """Prints list of commands or help for a specific command."""
   # This is the default help implementation. It can be disabled or overriden if
   # wanted.
-  if not any(i in ('-h', '--help') for i in args):
+  if all(i not in ('-h', '--help') for i in args):
     args = args + ['--help']
   _, args = parser.parse_args(args)
   # Never gets there.
@@ -107,9 +107,10 @@ class CommandDispatcher(object):
     e.g.:
       CMDhelp = None
     """
-    cmds = dict(
-        (fn[3:], getattr(self.module, fn))
-        for fn in dir(self.module) if fn.startswith('CMD'))
+    cmds = {
+        fn[3:]: getattr(self.module, fn)
+        for fn in dir(self.module) if fn.startswith('CMD')
+    }
     cmds.setdefault('help', CMDhelp)
     return cmds
 
@@ -200,8 +201,8 @@ class CommandDispatcher(object):
         parser.epilog = '\n' + parser.epilog.strip() + '\n'
 
     more = getattr(command, 'usage_more', '')
-    parser.set_usage(
-        'usage: %%prog %s [options]%s' % (name, '' if not more else ' ' + more))
+    parser.set_usage('usage: %%prog %s [options]%s' %
+                     (name, '' if not more else f' {more}'))
 
   @staticmethod
   def _create_command_summary(name, command):
@@ -211,9 +212,7 @@ class CommandDispatcher(object):
       return ''
     doc = command.__doc__ or ''
     line = doc.split('\n', 1)[0].rstrip('.')
-    if not line:
-      return line
-    return (line[0].lower() + line[1:]).strip()
+    return line if not line else (line[0].lower() + line[1:]).strip()
 
   def execute(self, parser, args):
     """Dispatches execution to the right command.
@@ -231,8 +230,7 @@ class CommandDispatcher(object):
         # Inverse the argument order so 'tool --help cmd' is rewritten to
         # 'tool cmd --help'.
         args = [args[1], args[0]] + args[2:]
-      command = self.find_nearest_command(args[0])
-      if command:
+      if command := self.find_nearest_command(args[0]):
         if command.__name__ == 'CMDhelp' and len(args) > 1:
           # Inverse the arguments order so 'tool help cmd' is rewritten to
           # 'tool cmd --help'. Do it here since we want 'tool hel cmd' to work
@@ -244,8 +242,7 @@ class CommandDispatcher(object):
         self._add_command_usage(parser, command)
         return command(parser, args[1:])
 
-    cmdhelp = self.enumerate_commands().get('help')
-    if cmdhelp:
+    if cmdhelp := self.enumerate_commands().get('help'):
       # Not a known command. Default to help.
       self._add_command_usage(parser, cmdhelp)
       return cmdhelp(parser, args)

@@ -39,7 +39,7 @@ from boto.exception import InvalidUriError
 __version__ = '2.8.0-dev'
 Version = __version__  # for backware compatibility
 
-UserAgent = 'Boto/%s (%s)' % (__version__, sys.platform)
+UserAgent = f'Boto/{__version__} ({sys.platform})'
 config = Config()
 
 # Regex to disallow buckets violating charset or not [3..255] chars total.
@@ -462,7 +462,7 @@ def connect_ec2_endpoint(url, aws_access_key_id=None,
     kwargs['port'] = purl.port
     kwargs['host'] = purl.hostname
     kwargs['path'] = purl.path
-    if not 'is_secure' in kwargs:
+    if 'is_secure' not in kwargs:
         kwargs['is_secure'] = (purl.scheme == "https")
 
     kwargs['region'] = RegionInfo(name=purl.hostname,
@@ -720,30 +720,27 @@ def storage_uri(uri_str, default_scheme='file', debug=0, validate=True,
         if colon_pos != -1:
             # Allow Windows path names including drive letter (C: etc.)
             drive_char = uri_str[0].lower()
-            if not (platform.system().lower().startswith('windows')
-                    and colon_pos == 1
-                    and drive_char >= 'a' and drive_char <= 'z'):
-              raise InvalidUriError('"%s" contains ":" instead of "://"' %
-                                    uri_str)
+            if (
+                not platform.system().lower().startswith('windows')
+                or colon_pos != 1
+                or drive_char < 'a'
+                or drive_char > 'z'
+            ):
+                raise InvalidUriError(f'"{uri_str}" contains ":" instead of "://"')
         scheme = default_scheme.lower()
         path = uri_str
     else:
-        scheme = uri_str[0:end_scheme_idx].lower()
+        scheme = uri_str[:end_scheme_idx].lower()
         path = uri_str[end_scheme_idx + 3:]
 
     if scheme not in ['file', 's3', 'gs']:
-        raise InvalidUriError('Unrecognized scheme "%s"' % scheme)
+        raise InvalidUriError(f'Unrecognized scheme "{scheme}"')
     if scheme == 'file':
-        # For file URIs we have no bucket name, and use the complete path
-        # (minus 'file://') as the object name.
-        is_stream = False
-        if path == '-':
-            is_stream = True
+        is_stream = path == '-'
         return FileStorageUri(path, debug, is_stream)
     else:
         path_parts = path.split('/', 1)
         bucket_name = path_parts[0]
-        object_name = ''
         # If validate enabled, ensure the bucket name is valid, to avoid
         # possibly confusing other parts of the code. (For example if we didn't
         # catch bucket names containing ':', when a user tried to connect to
@@ -752,25 +749,22 @@ def storage_uri(uri_str, default_scheme='file', debug=0, validate=True,
         if (validate and bucket_name and
             (not BUCKET_NAME_RE.match(bucket_name)
              or TOO_LONG_DNS_NAME_COMP.search(bucket_name))):
-            raise InvalidUriError('Invalid bucket name in URI "%s"' % uri_str)
+            raise InvalidUriError(f'Invalid bucket name in URI "{uri_str}"')
         if scheme == 'gs':
-            match = GENERATION_RE.search(path)
-            if match:
+            if match := GENERATION_RE.search(path):
                 md = match.groupdict()
                 versionless_uri_str = md['versionless_uri_str']
                 path_parts = versionless_uri_str.split('/', 1)
                 generation = int(md['generation'])
         elif scheme == 's3':
-            match = VERSION_RE.search(path)
-            if match:
+            if match := VERSION_RE.search(path):
                 md = match.groupdict()
                 versionless_uri_str = md['versionless_uri_str']
                 path_parts = versionless_uri_str.split('/', 1)
                 version_id = md['version_id']
         else:
-            raise InvalidUriError('Unrecognized scheme "%s"' % scheme)
-        if len(path_parts) > 1:
-            object_name = path_parts[1]
+            raise InvalidUriError(f'Unrecognized scheme "{scheme}"')
+        object_name = path_parts[1] if len(path_parts) > 1 else ''
         return bucket_storage_uri_class(
             scheme, bucket_name, object_name, debug,
             suppress_consec_slashes=suppress_consec_slashes,
@@ -787,7 +781,7 @@ def storage_uri_for_key(key):
         raise InvalidUriError('Requested key (%s) is not a subclass of '
                               'boto.s3.key.Key' % str(type(key)))
     prov_name = key.bucket.connection.provider.get_provider_name()
-    uri_str = '%s://%s/%s' % (prov_name, key.bucket.name, key.name)
+    uri_str = f'{prov_name}://{key.bucket.name}/{key.name}'
     return storage_uri(uri_str)
 
 boto.plugin.load_plugins(config)

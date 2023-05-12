@@ -45,9 +45,7 @@ class InvalidPlatformError(Exception):
 def GetNormalizedPlatform():
   """Returns the result of sys.platform accounting for cygwin.
   Under cygwin, this will always return "win32" like the native Python."""
-  if sys.platform == 'cygwin':
-    return 'win32'
-  return sys.platform
+  return 'win32' if sys.platform == 'cygwin' else sys.platform
 
 
 # Common utilities
@@ -56,7 +54,7 @@ class Gsutil(object):
   and is also immutable."""
   def __init__(self, path, boto_path, timeout=None, version='4.7'):
     if not os.path.exists(path):
-      raise FileNotFoundError('GSUtil not found in %s' % path)
+      raise FileNotFoundError(f'GSUtil not found in {path}')
     self.path = path
     self.timeout = timeout
     self.boto_path = boto_path
@@ -79,13 +77,11 @@ class Gsutil(object):
     return env
 
   def call(self, *args):
-    cmd = [sys.executable, self.path, '--force-version', self.version]
-    cmd.extend(args)
+    cmd = [sys.executable, self.path, '--force-version', self.version, *args]
     return subprocess2.call(cmd, env=self.get_sub_env(), timeout=self.timeout)
 
   def check_call(self, *args):
-    cmd = [sys.executable, self.path, '--force-version', self.version]
-    cmd.extend(args)
+    cmd = [sys.executable, self.path, '--force-version', self.version, *args]
     ((out, err), code) = subprocess2.communicate(
         cmd,
         stdout=subprocess2.PIPE,
@@ -93,16 +89,12 @@ class Gsutil(object):
         env=self.get_sub_env(),
         timeout=self.timeout)
 
-    # Parse output.
-    status_code_match = re.search('status=([0-9]+)', err)
-    if status_code_match:
-      return (int(status_code_match.group(1)), out, err)
+    if status_code_match := re.search('status=([0-9]+)', err):
+      return int(status_code_match[1]), out, err
     if ('You are attempting to access protected data with '
           'no configured credentials.' in err):
       return (403, out, err)
-    if 'No such object' in err:
-      return (404, out, err)
-    return (code, out, err)
+    return (404, out, err) if 'No such object' in err else (code, out, err)
 
 
 def check_platform(target):
@@ -120,11 +112,10 @@ def get_sha1(filename):
   sha1 = hashlib.sha1()
   with open(filename, 'rb') as f:
     while True:
-      # Read in 1mb chunks, so it doesn't all have to be loaded into memory.
-      chunk = f.read(1024*1024)
-      if not chunk:
+      if chunk := f.read(1024 * 1024):
+        sha1.update(chunk)
+      else:
         break
-      sha1.update(chunk)
   return sha1.hexdigest()
 
 
@@ -197,20 +188,19 @@ def _downloader_worker_thread(thread_num, q, force, base_url,
     input_sha1_sum, output_filename = q.get()
     if input_sha1_sum is None:
       return
-    if os.path.exists(output_filename) and not force:
-      if get_sha1(output_filename) == input_sha1_sum:
-        if verbose:
-          out_q.put(
-              '%d> File %s exists and SHA1 matches. Skipping.' % (
-                  thread_num, output_filename))
-        continue
+    if (os.path.exists(output_filename) and not force
+        and get_sha1(output_filename) == input_sha1_sum):
+      if verbose:
+        out_q.put(
+            '%d> File %s exists and SHA1 matches. Skipping.' % (
+                thread_num, output_filename))
+      continue
     # Check if file exists.
-    file_url = '%s/%s' % (base_url, input_sha1_sum)
+    file_url = f'{base_url}/{input_sha1_sum}'
     if gsutil.check_call('ls', file_url)[0] != 0:
       out_q.put('%d> File %s for %s does not exist, skipping.' % (
           thread_num, file_url, output_filename))
-      ret_codes.put((1, 'File %s for %s does not exist.' % (
-          file_url, output_filename)))
+      ret_codes.put((1, f'File {file_url} for {output_filename} does not exist.'))
       continue
     # Fetch the file.
     out_q.put('%d> Downloading %s...' % (thread_num, output_filename))

@@ -61,26 +61,26 @@ def runGcl(subcommand):
   return os.system(command)
 
 def gclUpload(revision, author):
-  command = ("upload " + str(revision) +
-             " --send_mail --no_presubmit --reviewers=" + author)
+  command = (
+      f"upload {str(revision)} --send_mail --no_presubmit --reviewers={author}"
+  )
   return runGcl(command)
 
 def getSVNInfo(url, revision):
   info = {}
   svn_info = subprocess2.capture(
-      ['svn', 'info', '--non-interactive', '%s@%s' % (url, revision)],
-      stderr=subprocess2.VOID).splitlines()
+      ['svn', 'info', '--non-interactive', f'{url}@{revision}'],
+      stderr=subprocess2.VOID,
+  ).splitlines()
   for line in svn_info:
-    match = re.search(r"(.*?):(.*)", line)
-    if match:
-      info[match.group(1).strip()] = match.group(2).strip()
+    if match := re.search(r"(.*?):(.*)", line):
+      info[match[1].strip()] = match[2].strip()
   return info
 
 def isSVNDirty():
   svn_status = subprocess2.check_output(['svn', 'status']).splitlines()
   for line in svn_status:
-    match = re.search(r"^[^X?]", line)
-    if match:
+    if match := re.search(r"^[^X?]", line):
       return True
 
   return False
@@ -93,17 +93,11 @@ def getAuthor(url, revision):
 
 def isSVNFile(url, revision):
   info = getSVNInfo(url, revision)
-  if (info.has_key("Node Kind")):
-    if (info["Node Kind"] == "file"):
-      return True
-  return False
+  return bool((info.has_key("Node Kind")) and (info["Node Kind"] == "file"))
 
 def isSVNDirectory(url, revision):
   info = getSVNInfo(url, revision)
-  if (info.has_key("Node Kind")):
-    if (info["Node Kind"] == "directory"):
-      return True
-  return False
+  return bool((info.has_key("Node Kind")) and (info["Node Kind"] == "directory"))
 
 def inCheckoutRoot(path):
   info = getSVNInfo(path, "HEAD")
@@ -111,9 +105,7 @@ def inCheckoutRoot(path):
     return False
   repo_root = info["Repository Root"]
   info = getSVNInfo(os.path.dirname(os.path.abspath(path)), "HEAD")
-  if (info.get("Repository Root", None) != repo_root):
-    return True
-  return False
+  return info.get("Repository Root", None) != repo_root
 
 def getRevisionLog(url, revision):
   """Takes an svn url and gets the associated revision."""
@@ -128,12 +120,11 @@ def getSVNVersionInfo():
   svn_info = subprocess2.check_output(['svn', '--version']).splitlines()
   info = {}
   for line in svn_info:
-    match = re.search(r"svn, version ((\d+)\.(\d+)\.(\d+))", line)
-    if match:
-      info['version'] = match.group(1)
-      info['major'] = int(match.group(2))
-      info['minor'] = int(match.group(3))
-      info['patch'] = int(match.group(4))
+    if match := re.search(r"svn, version ((\d+)\.(\d+)\.(\d+))", line):
+      info['version'] = match[1]
+      info['major'] = int(match[2])
+      info['minor'] = int(match[3])
+      info['patch'] = int(match[4])
       return info
 
   return None
@@ -157,10 +148,7 @@ def _isMinimumSVNVersion(version, major, minor, patch=0):
   elif (version['minor'] < minor):
     return False
 
-  if (version['patch'] >= patch):
-    return True
-  else:
-    return False
+  return version['patch'] >= patch
 
 def checkoutRevision(url, revision, branch_url, revert=False, pop=True):
   files_info = getFileInfo(url, revision)
@@ -283,15 +271,15 @@ def getFileInfo(url, revision):
 
   info = []
   for line in svn_log:
-    # A workaround to dump the (from .*) stuff, regex not so friendly in the 2nd
-    # pass...
-    match = re.search(r"(.*) \(from.*\)", line)
-    if match:
-      line = match.group(1)
-    match = re.search(file_pattern_, line)
-    if match:
-      info.append([match.group(1).strip(), match.group(2).strip(),
-                   match.group(3).strip(),match.group(4).strip()])
+    if match := re.search(r"(.*) \(from.*\)", line):
+      line = match[1]
+    if match := re.search(file_pattern_, line):
+      info.append([
+          match[1].strip(),
+          match[2].strip(),
+          match[3].strip(),
+          match[4].strip(),
+      ])
 
   files_info_ = info
   return info
@@ -302,7 +290,7 @@ def getBestMergePaths(url, revision):
 
 def getBestMergePaths2(files_info, revision):
   """Takes an svn url and gets the associated revision."""
-  return list(set([f[2] for f in files_info]))
+  return list({f[2] for f in files_info})
 
 def getBestExportPathsMap(url, revision):
   return getBestExportPathsMap2(getFileInfo(url, revision), revision)
@@ -314,13 +302,11 @@ def getBestExportPathsMap2(files_info, revision):
   if export_map_:
     return export_map_
 
-  result = {}
-  for file_info in files_info:
-    if (file_info[0] == "A"):
-      if(isSVNDirectory("svn://svn.chromium.org/chrome/" + file_info[1],
-                        revision)):
-        result[file_info[2] + "/" + file_info[3]] = ""
-
+  result = {
+      f"{file_info[2]}/{file_info[3]}": ""
+      for file_info in files_info if (file_info[0] == "A") and isSVNDirectory(
+          f"svn://svn.chromium.org/chrome/{file_info[1]}", revision)
+  }
   export_map_ = result
   return result
 
@@ -334,13 +320,11 @@ def getBestDeletePathsMap2(files_info, revision):
   if delete_map_:
     return delete_map_
 
-  result = {}
-  for file_info in files_info:
-    if (file_info[0] == "D"):
-      if(isSVNDirectory("svn://svn.chromium.org/chrome/" + file_info[1],
-                        revision)):
-        result[file_info[2] + "/" + file_info[3]] = ""
-
+  result = {
+      f"{file_info[2]}/{file_info[3]}": ""
+      for file_info in files_info if (file_info[0] == "D") and isSVNDirectory(
+          f"svn://svn.chromium.org/chrome/{file_info[1]}", revision)
+  }
   delete_map_ = result
   return result
 
@@ -351,7 +335,7 @@ def getExistingFilesInRevision(files_info):
   Anything that's A will require special treatment (either a merge or an
   export + add)
   """
-  return ['%s/%s' % (f[2], f[3]) for f in files_info if f[0] != 'A']
+  return [f'{f[2]}/{f[3]}' for f in files_info if f[0] != 'A']
 
 
 def getAllFilesInRevision(files_info):
@@ -360,7 +344,7 @@ def getAllFilesInRevision(files_info):
   Anything that's A will require special treatment (either a merge or an
   export + add)
   """
-  return ['%s/%s' % (f[2], f[3]) for f in files_info]
+  return [f'{f[2]}/{f[3]}' for f in files_info]
 
 
 def getSVNAuthInfo(folder=None):
@@ -630,7 +614,7 @@ def main():
     option_parser.error("You need at least --merge or --revert")
     return 1
 
-  if options.merge and not (options.branch or options.local):
+  if options.merge and not options.branch and not options.local:
     option_parser.error("--merge requires --branch or --local")
     return 1
 
